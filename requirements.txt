@@ -1,0 +1,7 @@
+# Data processing
+pandas>=2.2.0
+numpy>=2.0.0
+openpyxl>=3.1.0
+
+# Visualization (optional, for analysis scripts)
+matplotlib>=3.9.0
