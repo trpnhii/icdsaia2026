@@ -24,6 +24,7 @@ Outputs (input_data/2_years/)
 from __future__ import annotations
 
 import warnings
+import re
 from pathlib import Path
 
 import pandas as pd
@@ -57,12 +58,25 @@ def _daily_from_cumulative(df: pd.DataFrame, group_cols: list[str], cum_col: str
 
 # ── installed capacity ────────────────────────────────────────────────────────
 
+def _normalize_device_name(name: object) -> str:
+    """
+    Normalize capacity aliases to the same device names used by inverter exports.
+
+    installed_capacity.xlsx uses aliases such as 'HF1 INV1', while inverter
+    workbooks use 'HF1 Inverter 1' in the ManageObject path.
+    """
+    text = str(name).strip()
+    match = re.fullmatch(r"(HF\d+)\s+INV\s*(\d+)", text, flags=re.IGNORECASE)
+    if match:
+        return f"{match.group(1).upper()} Inverter {int(match.group(2))}"
+    return text
+
 def load_capacity() -> pd.DataFrame:
     """
     Return DataFrame with device_name and installed_capacity_kwp.
 
     Source: sheet 'INV Infor (2)'
-      col[2] = device alias  (e.g. 'HF1 Inverter 1')
+      col[2] = device alias  (e.g. 'HF1 INV1')
       col[5] = Công suất lắp đặt (kWp DC string capacity)
     """
     raw = pd.read_excel(DATA_DIR / "installed_capacity.xlsx",
@@ -74,7 +88,7 @@ def load_capacity() -> pd.DataFrame:
         if pd.notna(name) and pd.notna(capacity):
             try:
                 records.append({
-                    "device_name":            str(name).strip(),
+                    "device_name":            _normalize_device_name(name),
                     "installed_capacity_kwp": float(capacity),
                 })
             except (ValueError, TypeError):
@@ -231,6 +245,13 @@ def main() -> None:
     print(f"  Missing capacity : {tfm['installed_capacity_kwp'].isna().sum():,}")
     print(f"  Missing irr      : {tfm['irradiation_kwh_m2'].isna().sum():,}")
     print(f"  Missing PR       : {tfm['performance_ratio'].isna().sum():,}")
+    missing_capacity_devices = sorted(
+        tfm.loc[tfm["installed_capacity_kwp"].isna(), "device_name"].dropna().unique()
+    )
+    if missing_capacity_devices:
+        print(f"  Missing capacity devices: {len(missing_capacity_devices)}")
+        for device in missing_capacity_devices:
+            print(f"    - {device}")
     print()
     print(tfm.head(5).to_string(index=False))
 
