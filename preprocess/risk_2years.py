@@ -1,5 +1,5 @@
 """
-Risk scoring and replacement-candidate ranking for the 2-year inverter dataset.
+Daily risk scoring and replacement-candidate ranking for the 2-year dataset.
 
 Input:
   input_data/2_years/transformed.csv
@@ -8,10 +8,13 @@ Outputs:
   input_data/2_years/risk_scores.csv
   input_data/2_years/replacement_candidates.csv
   input_data/2_years/risk_watchlist.csv
+  input_data/2_years/daily/YYYY-MM-DD/risk_scores.csv
+  input_data/2_years/daily/YYYY-MM-DD/replacement_candidates.csv
+  input_data/2_years/daily/YYYY-MM-DD/risk_watchlist.csv
 
 The score is designed for triage. It does not prove hardware failure by itself;
-it highlights inverters with persistent recent underperformance versus same-day
-fleet peers and deteriorating short-term trend.
+it highlights inverter-days with persistent recent underperformance versus
+same-day fleet peers and deteriorating short-term trend.
 """
 
 from __future__ import annotations
@@ -28,6 +31,7 @@ OUTPUT_DIR = PROJECT_ROOT / "input_data" / "2_years"
 RISK_PATH = OUTPUT_DIR / "risk_scores.csv"
 CANDIDATES_PATH = OUTPUT_DIR / "replacement_candidates.csv"
 WATCHLIST_PATH = OUTPUT_DIR / "risk_watchlist.csv"
+DAILY_OUTPUT_DIR = OUTPUT_DIR / "daily"
 
 MIN_IRRADIATION = 0.5
 
@@ -43,9 +47,9 @@ def _slope_per_day(group: pd.DataFrame, value_col: str) -> float:
     return float(np.polyfit(x, y, deg=1)[0])
 
 
-def _window_metrics(df: pd.DataFrame, max_date: pd.Timestamp, days: int) -> pd.DataFrame:
-    lo = max_date - pd.Timedelta(days=days - 1)
-    w = df[df["date"].between(lo, max_date)].copy()
+def _window_metrics(df: pd.DataFrame, score_date: pd.Timestamp, days: int) -> pd.DataFrame:
+    lo = score_date - pd.Timedelta(days=days - 1)
+    w = df[df["date"].between(lo, score_date)].copy()
     return (
         w.groupby(["zone", "device_name"], as_index=False)
         .agg(
@@ -61,7 +65,7 @@ def _window_metrics(df: pd.DataFrame, max_date: pd.Timestamp, days: int) -> pd.D
     )
 
 
-def build_risk_scores(input_path: Path = INPUT_PATH) -> tuple[pd.DataFrame, pd.DataFrame]:
+def _prepare_valid_rows(input_path: Path) -> pd.DataFrame:
     df = pd.read_csv(input_path, parse_dates=["date"])
 
     # Logger-level rows do not represent replaceable inverter hardware.
@@ -84,10 +88,16 @@ def build_risk_scores(input_path: Path = INPUT_PATH) -> tuple[pd.DataFrame, pd.D
     valid["peer_deficit"] = (1 - valid["relative_pr"]).clip(lower=0, upper=1)
     valid["moderate_low"] = ((valid["relative_pr"] < 0.70) | (valid["performance_ratio"] < 0.40)).astype(int)
     valid["severe_low"] = ((valid["relative_pr"] < 0.50) | (valid["performance_ratio"] < 0.25)).astype(int)
+    return valid.sort_values(["date", "zone", "device_name"]).reset_index(drop=True)
 
-    max_date = valid["date"].max()
+
+def _score_one_day(history: pd.DataFrame, score_date: pd.Timestamp) -> pd.DataFrame:
+    current = history[history["date"] == score_date].copy()
+    if current.empty:
+        return pd.DataFrame()
+
     base = (
-        valid.sort_values("date")
+        current.sort_values("date")
         .groupby(["zone", "device_name"], as_index=False)
         .agg(
             latest_date=("date", "max"),
@@ -98,10 +108,18 @@ def build_risk_scores(input_path: Path = INPUT_PATH) -> tuple[pd.DataFrame, pd.D
         )
     )
 
-    last_14 = _window_metrics(valid, max_date, 14)
-    last_30 = _window_metrics(valid, max_date, 30)
+    lifetime_days = (
+        history.groupby(["zone", "device_name"], as_index=False)
+        .agg(total_valid_days=("date", "nunique"))
+    )
+    base = base.drop(columns=["total_valid_days"]).merge(
+        lifetime_days, on=["zone", "device_name"], how="left"
+    )
+
+    last_14 = _window_metrics(history, score_date, 14)
+    last_30 = _window_metrics(history, score_date, 30)
     trend_30 = (
-        valid[valid["date"].between(max_date - pd.Timedelta(days=29), max_date)]
+        history[history["date"].between(score_date - pd.Timedelta(days=29), score_date)]
         .groupby(["zone", "device_name"])
         .apply(lambda g: _slope_per_day(g, "relative_pr"), include_groups=False)
         .rename("relative_pr_slope_30d")
@@ -123,6 +141,7 @@ def build_risk_scores(input_path: Path = INPUT_PATH) -> tuple[pd.DataFrame, pd.D
             "latest_peer_deficit": 0.0,
         }
     )
+    risk["risk_date"] = score_date
 
     risk["trend_decline_30d"] = (-risk["relative_pr_slope_30d"] * 30).clip(lower=0, upper=1)
     risk["projected_relative_pr_14d"] = (
@@ -173,8 +192,20 @@ def build_risk_scores(input_path: Path = INPUT_PATH) -> tuple[pd.DataFrame, pd.D
         default="no_replacement_signal",
     )
     risk["replacement_candidate"] = risk["replacement_window"].isin(["within_14_days", "within_30_days"])
+    return risk
 
+
+def build_risk_scores(input_path: Path = INPUT_PATH) -> tuple[pd.DataFrame, pd.DataFrame]:
+    valid = _prepare_valid_rows(input_path)
+
+    frames: list[pd.DataFrame] = []
+    for score_date in valid["date"].drop_duplicates():
+        history = valid[valid["date"] <= score_date].copy()
+        frames.append(_score_one_day(history, score_date))
+
+    risk = pd.concat(frames, ignore_index=True)
     ordered_cols = [
+        "risk_date",
         "zone",
         "device_name",
         "latest_date",
@@ -200,31 +231,70 @@ def build_risk_scores(input_path: Path = INPUT_PATH) -> tuple[pd.DataFrame, pd.D
         "total_valid_days",
     ]
     risk = risk[ordered_cols].sort_values(
-        ["replacement_candidate", "replacement_window", "risk_score", "fleet_relative_risk_score"],
-        ascending=[False, True, False, False],
+        ["risk_date", "replacement_candidate", "replacement_window", "risk_score", "fleet_relative_risk_score"],
+        ascending=[True, False, True, False, False],
     )
     candidates = risk[risk["replacement_candidate"]].copy()
     return risk.reset_index(drop=True), candidates.reset_index(drop=True)
 
 
+def _top_watchlist(day_risk: pd.DataFrame, limit: int = 20) -> pd.DataFrame:
+    return (
+        day_risk.sort_values(
+            ["replacement_candidate", "replacement_window", "risk_score", "fleet_relative_risk_score"],
+            ascending=[False, True, False, False],
+        )
+        .head(limit)
+        .copy()
+    )
+
+
+def export_daily_outputs(risk: pd.DataFrame, candidates: pd.DataFrame) -> int:
+    DAILY_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    written_dates = 0
+    for risk_date, day_risk in risk.groupby("risk_date", sort=True):
+        date_text = pd.Timestamp(risk_date).strftime("%Y-%m-%d")
+        day_dir = DAILY_OUTPUT_DIR / date_text
+        day_dir.mkdir(parents=True, exist_ok=True)
+
+        day_candidates = candidates[candidates["risk_date"] == risk_date].copy()
+        day_watchlist = _top_watchlist(day_risk)
+
+        day_risk.to_csv(day_dir / "risk_scores.csv", index=False, encoding="utf-8-sig")
+        day_candidates.to_csv(day_dir / "replacement_candidates.csv", index=False, encoding="utf-8-sig")
+        day_watchlist.to_csv(day_dir / "risk_watchlist.csv", index=False, encoding="utf-8-sig")
+        written_dates += 1
+
+    return written_dates
+
+
 def main() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     risk, candidates = build_risk_scores()
-    watchlist = risk.head(20).copy()
+    latest_risk_date = risk["risk_date"].max()
+    watchlist = _top_watchlist(risk[risk["risk_date"] == latest_risk_date])
+
     risk.to_csv(RISK_PATH, index=False, encoding="utf-8-sig")
     candidates.to_csv(CANDIDATES_PATH, index=False, encoding="utf-8-sig")
     watchlist.to_csv(WATCHLIST_PATH, index=False, encoding="utf-8-sig")
+    written_dates = export_daily_outputs(risk, candidates)
 
     print(f"Risk scores -> {RISK_PATH}")
     print(f"Replacement candidates -> {CANDIDATES_PATH}")
     print(f"Watchlist -> {WATCHLIST_PATH}")
-    print(f"Scored inverters: {len(risk)}")
-    print(f"Replacement candidates: {len(candidates)}")
+    print(f"Daily output folders -> {DAILY_OUTPUT_DIR}")
+    print(f"Scored inverter-days: {len(risk)}")
+    print(f"Scored dates: {risk['risk_date'].nunique()}")
+    print(f"Daily folders written: {written_dates}")
+    print(f"Latest scored date: {latest_risk_date.date()}")
+    print(f"Replacement candidate-days: {len(candidates)}")
     if not candidates.empty:
         print()
         print(
             candidates[
                 [
+                    "risk_date",
                     "zone",
                     "device_name",
                     "risk_score",
