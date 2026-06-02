@@ -2,7 +2,7 @@
 Generate additional label-free evaluation figures for the 2-year pipeline.
 
 Outputs are written to:
-  output/figures/2_years/evaluation/
+  output_data/figures/evaluation/
 """
 
 from __future__ import annotations
@@ -16,14 +16,16 @@ import pandas as pd
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-INPUT_DIR = PROJECT_ROOT / "input_data" / "2_years"
-OUTPUT_DIR = PROJECT_ROOT / "output" / "figures" / "2_years" / "evaluation"
+BASE_INPUT_DIR = PROJECT_ROOT / "input_data" / "base"
+RISK_INPUT_DIR = PROJECT_ROOT / "input_data" / "risk"
+EVAL_INPUT_DIR = PROJECT_ROOT / "input_data" / "evaluation"
+OUTPUT_DIR = PROJECT_ROOT / "output_data" / "figures" / "evaluation"
 
-RISK_PATH = INPUT_DIR / "risk_scores.csv"
-TRANSFORMED_PATH = INPUT_DIR / "transformed.csv"
-QUALITY_PATH = INPUT_DIR / "no_label_quality_summary.csv"
-RISK_SUMMARY_PATH = INPUT_DIR / "no_label_risk_summary.csv"
-PERSISTENCE_PATH = INPUT_DIR / "no_label_candidate_persistence.csv"
+RISK_PATH = RISK_INPUT_DIR / "risk_scores.csv"
+TRANSFORMED_PATH = BASE_INPUT_DIR / "transformed.csv"
+QUALITY_PATH = EVAL_INPUT_DIR / "no_label_quality_summary.csv"
+RISK_SUMMARY_PATH = EVAL_INPUT_DIR / "no_label_risk_summary.csv"
+PERSISTENCE_PATH = EVAL_INPUT_DIR / "no_label_candidate_persistence.csv"
 
 STYLE = "seaborn-v0_8-whitegrid"
 

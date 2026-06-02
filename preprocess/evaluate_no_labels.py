@@ -22,17 +22,19 @@ import pandas as pd
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-INPUT_DIR = PROJECT_ROOT / "input_data" / "2_years"
-FIGURE_DIR = PROJECT_ROOT / "output" / "figures" / "2_years" / "candidate_diagnostics"
+BASE_INPUT_DIR = PROJECT_ROOT / "input_data" / "base"
+RISK_INPUT_DIR = PROJECT_ROOT / "input_data" / "risk"
+OUTPUT_DIR = PROJECT_ROOT / "input_data" / "evaluation"
+FIGURE_DIR = PROJECT_ROOT / "output_data" / "figures" / "candidate_diagnostics"
 
-TRANSFORMED_PATH = INPUT_DIR / "transformed.csv"
-RISK_PATH = INPUT_DIR / "risk_scores.csv"
-CANDIDATES_PATH = INPUT_DIR / "replacement_candidates.csv"
+TRANSFORMED_PATH = BASE_INPUT_DIR / "transformed.csv"
+RISK_PATH = RISK_INPUT_DIR / "risk_scores.csv"
+CANDIDATES_PATH = RISK_INPUT_DIR / "replacement_candidates.csv"
 
-QUALITY_SUMMARY_PATH = INPUT_DIR / "no_label_quality_summary.csv"
-RISK_SUMMARY_PATH = INPUT_DIR / "no_label_risk_summary.csv"
-PERSISTENCE_PATH = INPUT_DIR / "no_label_candidate_persistence.csv"
-REPORT_PATH = INPUT_DIR / "no_label_evaluation.md"
+QUALITY_SUMMARY_PATH = OUTPUT_DIR / "no_label_quality_summary.csv"
+RISK_SUMMARY_PATH = OUTPUT_DIR / "no_label_risk_summary.csv"
+PERSISTENCE_PATH = OUTPUT_DIR / "no_label_candidate_persistence.csv"
+REPORT_PATH = OUTPUT_DIR / "no_label_evaluation.md"
 
 MAX_DIAGNOSTIC_PLOTS = 20
 HIGH_PR_THRESHOLD = 1.20
@@ -333,6 +335,7 @@ def write_report(
 
 
 def main() -> None:
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     transformed, risk, candidates = _read_inputs()
     quality = build_quality_summary(transformed)
     risk_summary = build_risk_summary(risk)

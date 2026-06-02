@@ -26,15 +26,16 @@ import pandas as pd
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-INPUT_DIR = PROJECT_ROOT / "input_data" / "2_years"
-OUTPUT_DIR = PROJECT_ROOT / "output" / "figures" / "2_years" / "inventory"
+BASE_INPUT_DIR = PROJECT_ROOT / "input_data" / "base"
+RISK_INPUT_DIR = PROJECT_ROOT / "input_data" / "risk"
+INVENTORY_OUTPUT_DIR = PROJECT_ROOT / "input_data" / "inventory"
 CONFIG_PATH = PROJECT_ROOT / "config" / "spare_inventory.json"
 
-CANDIDATES_PATH = INPUT_DIR / "replacement_candidates.csv"
-TRANSFORMED_PATH = INPUT_DIR / "transformed.csv"
-SUMMARY_PATH = INPUT_DIR / "spare_inventory_cost_summary.csv"
-RECOMMENDATION_PATH = INPUT_DIR / "spare_inventory_recommendation.md"
-COST_CURVE_PATH = OUTPUT_DIR / "spare_inventory_cost_curve.png"
+CANDIDATES_PATH = RISK_INPUT_DIR / "replacement_candidates.csv"
+TRANSFORMED_PATH = BASE_INPUT_DIR / "transformed.csv"
+SUMMARY_PATH = INVENTORY_OUTPUT_DIR / "spare_inventory_cost_summary.csv"
+RECOMMENDATION_PATH = INVENTORY_OUTPUT_DIR / "spare_inventory_recommendation.md"
+COST_CURVE_PATH = PROJECT_ROOT / "output_data" / "figures" / "inventory" / "spare_inventory_cost_curve.png"
 
 
 def load_candidate_capacity() -> pd.DataFrame:
@@ -120,7 +121,7 @@ def find_breakeven(curve: pd.DataFrame, holding_cost_vnd_per_unit: float) -> pd.
 
 
 def plot_cost_curve(curve: pd.DataFrame, optimal_n: int) -> None:
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    COST_CURVE_PATH.parent.mkdir(parents=True, exist_ok=True)
     fig, ax = plt.subplots(figsize=(10, 6))
     ax.plot(curve["stock_n"], curve["expected_generation_loss_vnd"], marker="o", label="Expected generation loss")
     ax.plot(curve["stock_n"], curve["holding_cost_vnd"], marker="s", label="Holding cost")
@@ -275,6 +276,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = resolve_settings(parse_args())
+    INVENTORY_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     candidates = load_candidate_capacity()
     curve = build_cost_curve(
         candidates,

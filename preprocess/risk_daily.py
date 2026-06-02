@@ -2,15 +2,15 @@
 Daily risk scoring and replacement-candidate ranking for the 2-year dataset.
 
 Input:
-  input_data/2_years/transformed.csv
+  input_data/base/transformed.csv
 
 Outputs:
-  input_data/2_years/risk_scores.csv
-  input_data/2_years/replacement_candidates.csv
-  input_data/2_years/risk_watchlist.csv
-  input_data/2_years/daily/YYYY-MM-DD/risk_scores.csv
-  input_data/2_years/daily/YYYY-MM-DD/replacement_candidates.csv
-  input_data/2_years/daily/YYYY-MM-DD/risk_watchlist.csv
+  input_data/risk/risk_scores.csv
+  input_data/risk/replacement_candidates.csv
+  input_data/risk/risk_watchlist.csv
+  input_data/risk/daily/YYYY-MM-DD/risk_scores.csv
+  input_data/risk/daily/YYYY-MM-DD/replacement_candidates.csv
+  input_data/risk/daily/YYYY-MM-DD/risk_watchlist.csv
 
 The score is designed for triage. It does not prove hardware failure by itself;
 it highlights inverter-days with persistent recent underperformance versus
@@ -26,8 +26,8 @@ import pandas as pd
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-INPUT_PATH = PROJECT_ROOT / "input_data" / "2_years" / "transformed.csv"
-OUTPUT_DIR = PROJECT_ROOT / "input_data" / "2_years"
+INPUT_PATH = PROJECT_ROOT / "input_data" / "base" / "transformed.csv"
+OUTPUT_DIR = PROJECT_ROOT / "input_data" / "risk"
 RISK_PATH = OUTPUT_DIR / "risk_scores.csv"
 CANDIDATES_PATH = OUTPUT_DIR / "replacement_candidates.csv"
 WATCHLIST_PATH = OUTPUT_DIR / "risk_watchlist.csv"

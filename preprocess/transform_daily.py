@@ -1,5 +1,5 @@
 """
-Transform 2-year inverter + irradiation data → input_data/2_years/
+Transform inverter + irradiation data → input_data/base/
 
 Logic
 -----
@@ -14,7 +14,7 @@ Logic
 - Irradiation 2026  : Daily irradiation(Energy)(kWh/㎡) is also a cumulative
   counter → same diff approach as inverter energy.
 
-Outputs (input_data/2_years/)
+Outputs (input_data/base/)
 -------------------------------
   inverter_daily.csv     – daily yield per device
   irradiation_daily.csv  – daily irradiation (kWh/m²)
@@ -33,7 +33,7 @@ warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR     = PROJECT_ROOT / "data_2_years"
-OUTPUT_DIR   = PROJECT_ROOT / "input_data" / "2_years"
+BASE_DIR     = PROJECT_ROOT / "input_data" / "base"
 
 SHUNDAO = {1: DATA_DIR / "Shundao 1", 2: DATA_DIR / "Shundao 2"}
 IRR_DIR  = DATA_DIR / "Irradiation"
@@ -213,7 +213,7 @@ def build_transformed(inv: pd.DataFrame,
 # ── main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    BASE_DIR.mkdir(parents=True, exist_ok=True)
 
     print("\n[1/4] Installed capacity")
     cap = load_capacity()
@@ -227,9 +227,9 @@ def main() -> None:
     print("\n[4/4] Building transformed dataset")
     tfm = build_transformed(inv, irr, cap)
 
-    inv_path = OUTPUT_DIR / "inverter_daily.csv"
-    irr_path = OUTPUT_DIR / "irradiation_daily.csv"
-    tfm_path = OUTPUT_DIR / "transformed.csv"
+    inv_path = BASE_DIR / "inverter_daily.csv"
+    irr_path = BASE_DIR / "irradiation_daily.csv"
+    tfm_path = BASE_DIR / "transformed.csv"
 
     inv.to_csv(inv_path, index=False, encoding="utf-8-sig")
     irr.to_csv(irr_path, index=False, encoding="utf-8-sig")

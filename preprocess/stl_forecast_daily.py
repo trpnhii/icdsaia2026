@@ -2,13 +2,13 @@
 Generate STL and replacement-risk forecast figures from 2-year daily risk data.
 
 Inputs:
-  input_data/2_years/risk_scores.csv
-  input_data/2_years/transformed.csv
+  input_data/risk/risk_scores.csv
+  input_data/base/transformed.csv
 
 Outputs:
-  output/figures/2_years/stl_decomposition.png
-  output/figures/2_years/forecast.png
-  input_data/2_years/forecast_table.csv
+  output_data/figures/stl_decomposition.png
+  output_data/figures/forecast.png
+  input_data/forecast/forecast_table.csv
 """
 
 from __future__ import annotations
@@ -25,10 +25,10 @@ from statsmodels.tsa.seasonal import STL
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-RISK_PATH = PROJECT_ROOT / "input_data" / "2_years" / "risk_scores.csv"
-TRANSFORMED_PATH = PROJECT_ROOT / "input_data" / "2_years" / "transformed.csv"
-FIGURES_DIR = PROJECT_ROOT / "output" / "figures" / "2_years"
-FORECAST_TABLE_PATH = PROJECT_ROOT / "input_data" / "2_years" / "forecast_table.csv"
+RISK_PATH = PROJECT_ROOT / "input_data" / "risk" / "risk_scores.csv"
+TRANSFORMED_PATH = PROJECT_ROOT / "input_data" / "base" / "transformed.csv"
+FIGURES_DIR = PROJECT_ROOT / "output_data" / "figures"
+FORECAST_TABLE_PATH = PROJECT_ROOT / "input_data" / "forecast" / "forecast_table.csv"
 
 STL_PERIOD = 7
 STL_MIN_POINTS = 14
