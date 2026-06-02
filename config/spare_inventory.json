@@ -1,0 +1,7 @@
+{
+  "electricity_price_vnd_per_kwh": null,
+  "lead_time_days": null,
+  "holding_cost_vnd_per_unit": null,
+  "generation_hours_per_day": 1.0,
+  "max_stock": null
+}

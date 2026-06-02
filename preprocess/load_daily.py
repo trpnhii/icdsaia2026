@@ -13,9 +13,9 @@ Key logic
 
 Outputs
 -------
-  input_data/inv_2years.csv        – daily yield per inverter
-  input_data/irr_2years.csv        – daily irradiation
-  input_data/transformed_2years.csv – merged + PR, ready for modelling
+  input_data/inverter_daily.csv     – daily yield per inverter
+  input_data/irradiation_daily.csv  – daily irradiation
+  input_data/transformed.csv        – merged + PR, ready for modelling
 """
 
 from __future__ import annotations
@@ -267,9 +267,9 @@ def run(output_dir: Path = OUTPUT_DIR) -> tuple[Path, Path, Path]:
     print("\n── Building transformed dataset ──")
     transformed_df = build_transformed(inv_df, irr_df, capacity_df)
 
-    inv_path         = output_dir / "inv_2years.csv"
-    irr_path         = output_dir / "irr_2years.csv"
-    transformed_path = output_dir / "transformed_2years.csv"
+    inv_path         = output_dir / "inverter_daily.csv"
+    irr_path         = output_dir / "irradiation_daily.csv"
+    transformed_path = output_dir / "transformed.csv"
 
     inv_df.to_csv(inv_path, index=False, encoding="utf-8-sig")
     irr_df.to_csv(irr_path, index=False, encoding="utf-8-sig")
