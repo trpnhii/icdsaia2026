@@ -163,6 +163,11 @@ def write_recommendation(
 - Electricity price: {args.electricity_price_vnd_per_kwh:,.0f} VND/kWh
 - China lead time: {args.lead_time_days:g} days
 - Generation hours per day: {args.generation_hours_per_day:g}
+- Inverter unit cost: {args.inverter_unit_cost_vnd:,.0f} VND
+- WACC: {args.wacc_annual_percent:g}%
+- Holding cost formula: {args.holding_cost_formula}
+- Holding cost (10 spares / year): {args.reference_prestock_holding_cost_annual_vnd:,.0f} VND
+- Holding cost per spare / year: {args.holding_cost_annual_vnd_per_unit:,.0f} VND
 - Holding cost per spare over analysis period: {args.holding_cost_vnd_per_unit:,.0f} VND
 - Config file: `{CONFIG_PATH.relative_to(PROJECT_ROOT)}`
 - Candidate-days: {len(candidates):,}
@@ -214,6 +219,13 @@ def load_config(path: Path) -> dict[str, float | int | None]:
         "electricity_price_vnd_per_kwh": config.get("electricity_price_vnd_per_kwh"),
         "lead_time_days": config.get("lead_time_days"),
         "holding_cost_vnd_per_unit": config.get("holding_cost_vnd_per_unit"),
+        "holding_cost_annual_vnd_per_unit": config.get("holding_cost_annual_vnd_per_unit"),
+        "holding_cost_formula": config.get("holding_cost_formula", ""),
+        "inverter_unit_cost_vnd": config.get("inverter_unit_cost_vnd"),
+        "wacc_annual_percent": config.get("wacc_annual_percent"),
+        "reference_prestock_holding_cost_annual_vnd": config.get(
+            "reference_prestock_holding_cost_annual_vnd"
+        ),
         "generation_hours_per_day": config.get("generation_hours_per_day", 1.0),
         "max_stock": config.get("max_stock"),
     }
@@ -240,6 +252,13 @@ def resolve_settings(args: argparse.Namespace) -> argparse.Namespace:
             else config["generation_hours_per_day"]
         ),
         max_stock=args.max_stock if args.max_stock is not None else config["max_stock"],
+        holding_cost_annual_vnd_per_unit=config.get("holding_cost_annual_vnd_per_unit"),
+        holding_cost_formula=config.get("holding_cost_formula", ""),
+        inverter_unit_cost_vnd=config.get("inverter_unit_cost_vnd"),
+        wacc_annual_percent=config.get("wacc_annual_percent"),
+        reference_prestock_holding_cost_annual_vnd=config.get(
+            "reference_prestock_holding_cost_annual_vnd"
+        ),
     )
 
     required = [
