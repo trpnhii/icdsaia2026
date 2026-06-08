@@ -46,8 +46,13 @@ def read_assumptions(workbook_path: Path) -> dict[str, Assumption]:
         parameter = row[0]
         if not parameter:
             continue
-        assumptions[str(parameter)] = Assumption(
-            parameter=str(parameter),
+        parameter_text = str(parameter).strip()
+        if parameter_text.lower() == "parameter":
+            continue
+        if parameter_text.lower().startswith("operational assumptions retained"):
+            continue
+        assumptions[parameter_text] = Assumption(
+            parameter=parameter_text,
             value=row[1],
             unit="" if row[2] is None else str(row[2]),
             assumption_type="" if row[3] is None else str(row[3]),
@@ -63,8 +68,14 @@ def read_assumption_formulas(workbook_path: Path) -> dict[str, str]:
     formulas: dict[str, str] = {}
     for row in ws.iter_rows(min_row=4, values_only=True):
         parameter = row[0]
-        if parameter:
-            formulas[str(parameter)] = "" if row[5] is None else str(row[5])
+        if not parameter:
+            continue
+        parameter_text = str(parameter).strip()
+        if parameter_text.lower() == "parameter":
+            continue
+        if parameter_text.lower().startswith("operational assumptions retained"):
+            continue
+        formulas[parameter_text] = "" if row[5] is None else str(row[5])
     return formulas
 
 
@@ -72,10 +83,28 @@ def get_number(assumptions: dict[str, Assumption], key: str) -> float | None:
     item = assumptions.get(key)
     if item is None or item.value in (None, ""):
         return None
+    if isinstance(item.value, str):
+        value = item.value.strip().replace(",", "")
+        is_percent = value.endswith("%")
+        if is_percent:
+            value = value[:-1]
+        try:
+            number = float(value)
+        except ValueError:
+            return None
+        return number / 100 if is_percent else number
     try:
         return float(item.value)
     except (TypeError, ValueError):
         return None
+
+
+def get_number_any(assumptions: dict[str, Assumption], keys: list[str]) -> float | None:
+    for key in keys:
+        value = get_number(assumptions, key)
+        if value is not None:
+            return value
+    return None
 
 
 def extract_fm_discount_rate(workbook_path: Path) -> float | None:
@@ -151,11 +180,14 @@ def build_monthly_deltas_from_pipeline(
     lead_time_days = get_number(assumptions, "china_lead_time_days") or 0.0
     installation_time_hours = get_number(assumptions, "installation_time_hours") or 0.0
     generation_hours_per_day = get_number(assumptions, "generation_hours_per_day") or 0.0
-    price_vnd_per_kwh = (
-        get_number(assumptions, "quick_blended_price_vnd_per_kwh")
-        or get_number(assumptions, "quick_ppa_price_vnd_per_kwh")
-        or 0.0
-    )
+    price_vnd_per_kwh = get_number_any(
+        assumptions,
+        [
+            "electricity_price_vnd_per_kwh",
+            "quick_blended_price_vnd_per_kwh",
+            "quick_ppa_price_vnd_per_kwh",
+        ],
+    ) or 0.0
     current_stock = get_number(assumptions, "current_spare_stock_units") or 0.0
     inverter_unit_cost = get_number(assumptions, "inverter_unit_cost") or 0.0
     holding_rate_annual = get_number(assumptions, "holding_cost_rate_annual") or 0.0
@@ -269,9 +301,12 @@ def build_financial_outputs(
     discount_rate_annual: float | None,
     horizon_months: int,
     operational_metadata: dict[str, object],
+    capex_ai_override_vnd: float | None,
+    capex_ai_source: str,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     monthly_rate = None if discount_rate_annual is None else (1 + discount_rate_annual) ** (1 / 12) - 1
-    capex_ai = get_number(assumptions, "capex_ai")
+    capex_ai_from_workbook = get_number(assumptions, "capex_ai")
+    capex_ai = capex_ai_override_vnd if capex_ai_override_vnd is not None else capex_ai_from_workbook
 
     timeline_rows = []
     ai_cashflows = [-(capex_ai or 0.0)]
@@ -329,6 +364,7 @@ def build_financial_outputs(
                 "npv_vnd": 0.0 if monthly_rate is not None else math.nan,
                 "irr_monthly": None,
                 "irr_annual_effective": None,
+                "capex_ai_source": "",
                 "capex_ai_included_vnd": 0.0,
                 "max_capex_ai_for_npv_zero_vnd": None,
                 "cashflow_month_0_vnd": 0.0,
@@ -339,6 +375,7 @@ def build_financial_outputs(
                 "npv_vnd": ai_npv,
                 "irr_monthly": irr(ai_cashflows),
                 "irr_annual_effective": None,
+                "capex_ai_source": capex_ai_source if capex_ai is not None else "missing",
                 "capex_ai_included_vnd": capex_ai,
                 "max_capex_ai_for_npv_zero_vnd": pv_operating_benefit,
                 "cashflow_month_0_vnd": ai_cashflows[0],
@@ -392,6 +429,13 @@ def build_financial_outputs(
         missing.append({"missing_input": "discount_rate_annual", "reason": "Needed for NPV discounting."})
     if capex_ai is None:
         missing.append({"missing_input": "capex_ai", "reason": "Needed for month-0 AI investment cashflow."})
+    elif capex_ai_from_workbook is None:
+        missing.append(
+            {
+                "missing_input": "official_capex_ai",
+                "reason": f"Current run uses {capex_ai_source}. Hà/team should confirm whether this is the official CAPEX AI.",
+            }
+        )
     if "baseline_downtime_cost" not in assumptions:
         missing.append(
             {
@@ -442,6 +486,10 @@ def write_decision_summary(
     total_candidates = timeline["replacement_candidate_events"].sum() if "replacement_candidate_events" in timeline else 0
     max_capex = ai.get("max_capex_ai_for_npv_zero_vnd")
     npv = ai.get("npv_vnd")
+    capex = ai.get("capex_ai_included_vnd")
+    capex_source = ai.get("capex_ai_source")
+    irr_monthly = ai.get("irr_monthly")
+    irr_annual = ai.get("irr_annual_effective")
 
     lines = [
         "# AI Financial Effectiveness Summary",
@@ -450,14 +498,17 @@ def write_decision_summary(
         "",
         "## Current Data-Driven Result",
         "",
-        f"- Discounted AI benefit / NPV before missing CAPEX: {npv:,.0f} VND",
+        f"- AI NPV after included CAPEX: {npv:,.0f} VND",
+        f"- Included AI CAPEX: {capex:,.0f} VND ({capex_source})",
         f"- Break-even AI CAPEX for NPV >= 0: {max_capex:,.0f} VND",
+        f"- Monthly IRR: {irr_monthly:.2%}" if pd.notna(irr_monthly) else "- Monthly IRR: unavailable",
+        f"- Annual effective IRR: {irr_annual:.2%}" if pd.notna(irr_annual) else "- Annual effective IRR: unavailable",
         f"- Generation saved from detected replacement candidates: {total_saved_mwh:,.2f} MWh",
         f"- Replacement candidate events covered in current data: {int(total_candidates):,}",
         "",
         "## Interpretation",
         "",
-        "AI is financially effective under the current pipeline data if confirmed AI CAPEX is below the break-even CAPEX above. IRR remains unavailable until `capex_ai` is provided because IRR requires an initial negative investment cashflow.",
+        "AI is financially effective under the current pipeline data if confirmed AI CAPEX is below the break-even CAPEX above. If CAPEX is supplied as a scenario override, Hà/team should still confirm whether it is the official CAPEX assumption.",
         "",
         "## Inputs Still Needed For Final 24-Month Proof",
         "",
@@ -475,11 +526,28 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--workbook", type=Path, default=DEFAULT_WORKBOOK)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--horizon-months", type=int, default=24)
+    parser.add_argument("--capex-ai-vnd", type=float, default=None)
+    parser.add_argument("--capex-ai-usd", type=float, default=None)
     parser.add_argument("--candidates", type=Path, default=DEFAULT_CANDIDATES)
     parser.add_argument("--daily-risk-dir", type=Path, default=DEFAULT_DAILY_RISK_DIR)
     parser.add_argument("--transformed", type=Path, default=DEFAULT_TRANSFORMED)
     parser.add_argument("--inventory-summary", type=Path, default=DEFAULT_INVENTORY_SUMMARY)
     return parser.parse_args()
+
+
+def resolve_capex_override(args: argparse.Namespace, assumptions: dict[str, Assumption]) -> tuple[float | None, str]:
+    if args.capex_ai_vnd is not None and args.capex_ai_usd is not None:
+        raise ValueError("Use either --capex-ai-vnd or --capex-ai-usd, not both.")
+    if args.capex_ai_vnd is not None:
+        return args.capex_ai_vnd, "cli_override_vnd"
+    if args.capex_ai_usd is not None:
+        fx = get_number_any(assumptions, ["fx_vnd_usd", "fx_usd_vnd"])
+        if fx is None:
+            raise ValueError("--capex-ai-usd requires fx_vnd_usd or fx_usd_vnd in the assumptions workbook.")
+        return args.capex_ai_usd * fx, f"cli_override_usd_{args.capex_ai_usd:g}_fx_{fx:g}"
+    if get_number(assumptions, "capex_ai") is not None:
+        return None, "workbook_assumption"
+    return None, "missing"
 
 
 def main() -> None:
@@ -488,7 +556,8 @@ def main() -> None:
 
     assumptions = read_assumptions(args.workbook)
     formulas = read_assumption_formulas(args.workbook)
-    discount_rate = extract_fm_discount_rate(args.workbook)
+    capex_ai_override_vnd, capex_ai_source = resolve_capex_override(args, assumptions)
+    discount_rate = get_number(assumptions, "discount_rate_annual") or extract_fm_discount_rate(args.workbook)
     deltas, operational_metadata = build_monthly_deltas_from_pipeline(
         assumptions=assumptions,
         candidates_path=args.candidates,
@@ -505,6 +574,8 @@ def main() -> None:
         discount_rate_annual=discount_rate,
         horizon_months=args.horizon_months,
         operational_metadata=operational_metadata,
+        capex_ai_override_vnd=capex_ai_override_vnd,
+        capex_ai_source=capex_ai_source,
     )
 
     comparison_path = args.output_dir / "npv_irr_comparison.csv"
