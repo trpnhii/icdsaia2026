@@ -325,6 +325,15 @@ th {
   text-transform: uppercase;
 }
 
+.cell-note {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: none;
+}
+
 .risk-high {
   color: var(--danger);
   font-weight: 700;

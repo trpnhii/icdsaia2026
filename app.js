@@ -17,6 +17,7 @@ function vndShort(value) {
 }
 
 function pct(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return "-";
   return `${(Number(value || 0) * 100).toFixed(2)}%`;
 }
 
@@ -449,7 +450,7 @@ function renderScenarioComparison() {
     .map(
       (row) => `
         <tr>
-          <th>${row.scenario}</th>
+          <th>${row.scenario}${row.note ? `<small class="cell-note">${row.note}</small>` : ""}</th>
           <td>${row.irr_monthly === null || row.irr_monthly === undefined ? "-" : pct(row.irr_monthly)}</td>
           <td>${row.npv_vnd === null || row.npv_vnd === undefined ? "-" : vndShort(row.npv_vnd)}</td>
         </tr>

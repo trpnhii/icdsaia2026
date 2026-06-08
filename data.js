@@ -1,6 +1,7 @@
 window.DASHBOARD_DATA = {
+  "asOf": "2026-04-28",
   "risk": {
-    "latest_scored_date": "2026-04-30",
+    "latest_scored_date": "2026-04-28",
     "scored_inverter_days": 79902,
     "scored_dates": 397,
     "latest_watchlist_count": 217,
@@ -637,7 +638,10 @@ window.DASHBOARD_DATA = {
   },
   "financial": {
     "npv_vnd": 683972080.3695023,
-    "irr_monthly": 1.5887114610838464,
+    "irr_monthly": 0.09082953943545855,
+    "irr_raw_monthly": 1.5887114610838464,
+    "irr_coverage_months": 3,
+    "irr_reliability_note": "IRR adjusted by data coverage (3/24 months) to reduce short-window overstatement.",
     "capex_ai_vnd": 76500000.0,
     "break_even_capex_vnd": 760472080.3695023
   },
@@ -756,6 +760,8 @@ window.DASHBOARD_DATA = {
   "taskFlow": {
     "prMatrix": {
       "dates": [
+        "19-Apr",
+        "20-Apr",
         "21-Apr",
         "22-Apr",
         "23-Apr",
@@ -763,9 +769,7 @@ window.DASHBOARD_DATA = {
         "25-Apr",
         "26-Apr",
         "27-Apr",
-        "28-Apr",
-        "29-Apr",
-        "30-Apr"
+        "28-Apr"
       ],
       "rows": [
         {
@@ -773,6 +777,8 @@ window.DASHBOARD_DATA = {
           "device_name": "HF18 Inverter 1",
           "zone": 2,
           "values": [
+            71.7,
+            69.7,
             67.4,
             70.6,
             66.6,
@@ -780,9 +786,7 @@ window.DASHBOARD_DATA = {
             67.7,
             67.5,
             66.5,
-            66.0,
-            34.8,
-            20.3
+            66.0
           ]
         },
         {
@@ -790,6 +794,8 @@ window.DASHBOARD_DATA = {
           "device_name": "HF17 Inverter 3",
           "zone": 2,
           "values": [
+            62.4,
+            61.2,
             59.1,
             61.5,
             58.4,
@@ -797,9 +803,7 @@ window.DASHBOARD_DATA = {
             58.8,
             59.8,
             58.5,
-            58.8,
-            30.8,
-            19.2
+            58.8
           ]
         },
         {
@@ -807,6 +811,8 @@ window.DASHBOARD_DATA = {
           "device_name": "HF18 Inverter 2",
           "zone": 2,
           "values": [
+            71.5,
+            69.5,
             67.2,
             70.4,
             65.4,
@@ -814,9 +820,7 @@ window.DASHBOARD_DATA = {
             67.6,
             67.3,
             66.2,
-            65.6,
-            34.7,
-            20.3
+            65.6
           ]
         },
         {
@@ -824,6 +828,8 @@ window.DASHBOARD_DATA = {
           "device_name": "HF17 Inverter 1",
           "zone": 2,
           "values": [
+            62.6,
+            61.2,
             59.2,
             61.8,
             58.7,
@@ -831,9 +837,7 @@ window.DASHBOARD_DATA = {
             59.2,
             60.2,
             59.1,
-            59.4,
-            31.3,
-            19.2
+            59.4
           ]
         },
         {
@@ -841,6 +845,8 @@ window.DASHBOARD_DATA = {
           "device_name": "HF18 Inverter 3",
           "zone": 2,
           "values": [
+            70.2,
+            68.1,
             66.2,
             69.3,
             65.1,
@@ -848,9 +854,7 @@ window.DASHBOARD_DATA = {
             66.3,
             66.4,
             65.2,
-            64.4,
-            34.2,
-            20.2
+            64.4
           ]
         },
         {
@@ -858,6 +862,8 @@ window.DASHBOARD_DATA = {
           "device_name": "HF17 Inverter 2",
           "zone": 2,
           "values": [
+            62.9,
+            61.1,
             59.3,
             61.6,
             58.7,
@@ -865,9 +871,7 @@ window.DASHBOARD_DATA = {
             59.1,
             59.6,
             58.5,
-            58.4,
-            30.7,
-            19.1
+            58.4
           ]
         },
         {
@@ -875,6 +879,8 @@ window.DASHBOARD_DATA = {
           "device_name": "HF20 Inverter 1",
           "zone": 2,
           "values": [
+            63.6,
+            64.6,
             59.9,
             62.6,
             70.3,
@@ -882,9 +888,7 @@ window.DASHBOARD_DATA = {
             69.5,
             69.7,
             68.0,
-            67.6,
-            35.2,
-            20.0
+            67.6
           ]
         },
         {
@@ -892,6 +896,8 @@ window.DASHBOARD_DATA = {
           "device_name": "HF18 Inverter 4",
           "zone": 2,
           "values": [
+            72.9,
+            71.1,
             68.4,
             72.3,
             66.8,
@@ -899,9 +905,7 @@ window.DASHBOARD_DATA = {
             68.7,
             68.7,
             67.4,
-            67.3,
-            35.8,
-            20.4
+            67.3
           ]
         },
         {
@@ -909,6 +913,8 @@ window.DASHBOARD_DATA = {
           "device_name": "HF17 Inverter 4",
           "zone": 2,
           "values": [
+            69.2,
+            67.7,
             65.1,
             67.9,
             64.5,
@@ -916,14 +922,22 @@ window.DASHBOARD_DATA = {
             65.4,
             65.3,
             64.5,
-            64.8,
-            33.7,
-            19.7
+            64.8
           ]
         }
       ]
     },
     "dailyAlarms": [
+      {
+        "date": "2026-03-30",
+        "alarm_count": 103,
+        "device_count": 103
+      },
+      {
+        "date": "2026-03-31",
+        "alarm_count": 103,
+        "device_count": 103
+      },
       {
         "date": "2026-04-01",
         "alarm_count": 216,
@@ -1063,16 +1077,6 @@ window.DASHBOARD_DATA = {
         "date": "2026-04-28",
         "alarm_count": 184,
         "device_count": 217
-      },
-      {
-        "date": "2026-04-29",
-        "alarm_count": 217,
-        "device_count": 217
-      },
-      {
-        "date": "2026-04-30",
-        "alarm_count": 217,
-        "device_count": 217
       }
     ],
     "monthlyAbnormal": [
@@ -1099,17 +1103,17 @@ window.DASHBOARD_DATA = {
       {
         "month": 5,
         "label": "May",
-        "quantity": 5
+        "quantity": 3
       },
       {
         "month": 6,
         "label": "Jun",
-        "quantity": 7
+        "quantity": 3
       },
       {
         "month": 7,
         "label": "Jul",
-        "quantity": 40
+        "quantity": 12
       },
       {
         "month": 8,
@@ -1141,119 +1145,139 @@ window.DASHBOARD_DATA = {
       {
         "equipment": "HF18 INV1",
         "pr_pct": 8.4,
-        "baseline_generation_loss_kwh": 7243.2,
-        "baseline_revenue_loss_vnd": 15229121.0,
-        "baseline_measure_cost_vnd": 761456.0,
-        "ai_generation_loss_kwh": 72.4,
-        "ai_revenue_loss_vnd": 152291.0,
-        "ai_measure_cost_vnd": 833333.0
+        "candidate_days": 9.0,
+        "weighted_event_days": 7.4,
+        "baseline_generation_loss_kwh": 53599.9,
+        "baseline_revenue_loss_vnd": 112695495.0,
+        "baseline_measure_cost_vnd": 2775000.0,
+        "ai_generation_loss_kwh": 5360.0,
+        "ai_revenue_loss_vnd": 11269550.0,
+        "ai_measure_cost_vnd": 1258237.0
       },
       {
         "equipment": "HF17 INV3",
         "pr_pct": 8.3,
-        "baseline_generation_loss_kwh": 7243.2,
-        "baseline_revenue_loss_vnd": 15229121.0,
-        "baseline_measure_cost_vnd": 761456.0,
-        "ai_generation_loss_kwh": 72.4,
-        "ai_revenue_loss_vnd": 152291.0,
-        "ai_measure_cost_vnd": 833333.0
+        "candidate_days": 7.0,
+        "weighted_event_days": 5.8,
+        "baseline_generation_loss_kwh": 42010.8,
+        "baseline_revenue_loss_vnd": 88328902.0,
+        "baseline_measure_cost_vnd": 2175000.0,
+        "ai_generation_loss_kwh": 4201.1,
+        "ai_revenue_loss_vnd": 8832890.0,
+        "ai_measure_cost_vnd": 986186.0
       },
       {
         "equipment": "HF18 INV2",
         "pr_pct": 1.6,
-        "baseline_generation_loss_kwh": 7243.2,
-        "baseline_revenue_loss_vnd": 15229121.0,
-        "baseline_measure_cost_vnd": 761456.0,
-        "ai_generation_loss_kwh": 72.4,
-        "ai_revenue_loss_vnd": 152291.0,
-        "ai_measure_cost_vnd": 833333.0
+        "candidate_days": 6.0,
+        "weighted_event_days": 5.2,
+        "baseline_generation_loss_kwh": 37664.8,
+        "baseline_revenue_loss_vnd": 79191429.0,
+        "baseline_measure_cost_vnd": 1950000.0,
+        "ai_generation_loss_kwh": 3766.5,
+        "ai_revenue_loss_vnd": 7919143.0,
+        "ai_measure_cost_vnd": 884167.0
       },
       {
         "equipment": "HF17 INV1",
         "pr_pct": 0.0,
-        "baseline_generation_loss_kwh": 7243.2,
-        "baseline_revenue_loss_vnd": 15229121.0,
-        "baseline_measure_cost_vnd": 761456.0,
-        "ai_generation_loss_kwh": 72.4,
-        "ai_revenue_loss_vnd": 152291.0,
-        "ai_measure_cost_vnd": 833333.0
+        "candidate_days": 5.0,
+        "weighted_event_days": 4.2,
+        "baseline_generation_loss_kwh": 30421.6,
+        "baseline_revenue_loss_vnd": 63962308.0,
+        "baseline_measure_cost_vnd": 1575000.0,
+        "ai_generation_loss_kwh": 3042.2,
+        "ai_revenue_loss_vnd": 6396231.0,
+        "ai_measure_cost_vnd": 714135.0
       },
       {
         "equipment": "HF18 INV3",
         "pr_pct": 1.9,
-        "baseline_generation_loss_kwh": 7243.2,
-        "baseline_revenue_loss_vnd": 15229121.0,
-        "baseline_measure_cost_vnd": 761456.0,
-        "ai_generation_loss_kwh": 72.4,
-        "ai_revenue_loss_vnd": 152291.0,
-        "ai_measure_cost_vnd": 833333.0
+        "candidate_days": 5.0,
+        "weighted_event_days": 3.8,
+        "baseline_generation_loss_kwh": 27524.3,
+        "baseline_revenue_loss_vnd": 57870660.0,
+        "baseline_measure_cost_vnd": 1425000.0,
+        "ai_generation_loss_kwh": 2752.4,
+        "ai_revenue_loss_vnd": 5787066.0,
+        "ai_measure_cost_vnd": 646122.0
       },
       {
         "equipment": "HF17 INV2",
         "pr_pct": 0.0,
-        "baseline_generation_loss_kwh": 7243.2,
-        "baseline_revenue_loss_vnd": 15229121.0,
-        "baseline_measure_cost_vnd": 761456.0,
-        "ai_generation_loss_kwh": 72.4,
-        "ai_revenue_loss_vnd": 152291.0,
-        "ai_measure_cost_vnd": 833333.0
+        "candidate_days": 4.0,
+        "weighted_event_days": 3.2,
+        "baseline_generation_loss_kwh": 23178.4,
+        "baseline_revenue_loss_vnd": 48733187.0,
+        "baseline_measure_cost_vnd": 1200000.0,
+        "ai_generation_loss_kwh": 2317.8,
+        "ai_revenue_loss_vnd": 4873319.0,
+        "ai_measure_cost_vnd": 544103.0
       },
       {
         "equipment": "HF20 INV1",
         "pr_pct": 8.4,
-        "baseline_generation_loss_kwh": 7243.2,
-        "baseline_revenue_loss_vnd": 15229121.0,
-        "baseline_measure_cost_vnd": 761456.0,
-        "ai_generation_loss_kwh": 72.4,
-        "ai_revenue_loss_vnd": 152291.0,
-        "ai_measure_cost_vnd": 833333.0
+        "candidate_days": 3.0,
+        "weighted_event_days": 2.6,
+        "baseline_generation_loss_kwh": 18832.4,
+        "baseline_revenue_loss_vnd": 39595715.0,
+        "baseline_measure_cost_vnd": 975000.0,
+        "ai_generation_loss_kwh": 1883.2,
+        "ai_revenue_loss_vnd": 3959571.0,
+        "ai_measure_cost_vnd": 442083.0
       },
       {
         "equipment": "HF18 INV4",
         "pr_pct": 3.4,
-        "baseline_generation_loss_kwh": 7243.2,
-        "baseline_revenue_loss_vnd": 15229121.0,
-        "baseline_measure_cost_vnd": 761456.0,
-        "ai_generation_loss_kwh": 72.4,
-        "ai_revenue_loss_vnd": 152291.0,
-        "ai_measure_cost_vnd": 833333.0
+        "candidate_days": 3.0,
+        "weighted_event_days": 2.2,
+        "baseline_generation_loss_kwh": 15935.1,
+        "baseline_revenue_loss_vnd": 33504066.0,
+        "baseline_measure_cost_vnd": 825000.0,
+        "ai_generation_loss_kwh": 1593.5,
+        "ai_revenue_loss_vnd": 3350407.0,
+        "ai_measure_cost_vnd": 374071.0
       },
       {
         "equipment": "HF17 INV4",
         "pr_pct": 0.0,
-        "baseline_generation_loss_kwh": 7243.2,
-        "baseline_revenue_loss_vnd": 15229121.0,
-        "baseline_measure_cost_vnd": 761456.0,
-        "ai_generation_loss_kwh": 72.4,
-        "ai_revenue_loss_vnd": 152291.0,
-        "ai_measure_cost_vnd": 833333.0
+        "candidate_days": 2.0,
+        "weighted_event_days": 1.6,
+        "baseline_generation_loss_kwh": 11589.2,
+        "baseline_revenue_loss_vnd": 24366594.0,
+        "baseline_measure_cost_vnd": 600000.0,
+        "ai_generation_loss_kwh": 1158.9,
+        "ai_revenue_loss_vnd": 2436659.0,
+        "ai_measure_cost_vnd": 272051.0
       }
     ],
     "operationalTotals": {
-      "baseline_generation_loss_kwh": 65188.8,
-      "baseline_revenue_loss_vnd": 137062089.0,
-      "baseline_measure_cost_vnd": 6853104.0,
-      "ai_generation_loss_kwh": 651.6,
-      "ai_revenue_loss_vnd": 1370619.0,
-      "ai_measure_cost_vnd": 7499997.0
+      "baseline_generation_loss_kwh": 260756.5,
+      "baseline_revenue_loss_vnd": 548248356.0,
+      "baseline_measure_cost_vnd": 13500000.0,
+      "ai_generation_loss_kwh": 26075.6,
+      "ai_revenue_loss_vnd": 54824836.0,
+      "ai_measure_cost_vnd": 6121155.0
     },
     "scenarioComparison": [
       {
         "scenario": "Without AI",
-        "npv_vnd": 0.0,
-        "irr_monthly": null,
-        "irr_annual": null
+        "npv_vnd": 217618548.0,
+        "irr_monthly": 0.046868979693603485,
+        "irr_annual": 0.732638555661346,
+        "note": "Reference provided by team: IRR 14.73%/quarter, NPV 8,517.36 USD, FX 25,550."
       },
       {
         "scenario": "With AI",
         "npv_vnd": 683972080.3695023,
-        "irr_monthly": 1.5887114610838464,
-        "irr_annual": 90573.0437808044
+        "irr_monthly": 0.09082953943545855,
+        "irr_annual": 1.838459359015637,
+        "note": ""
       }
     ],
     "scenarioVariance": {
-      "npv_vnd": 683972080.3695023,
-      "irr_monthly": null
+      "npv_vnd": 466353532.3695023,
+      "irr_monthly": 0.04396055974185506
     },
     "inventoryDecision": {
       "demand_devices": 15,
@@ -1264,8 +1288,8 @@ window.DASHBOARD_DATA = {
     },
     "summary": {
       "money_saved_vnd": 772091316.016,
-      "npv_gain_vnd": 683972080.3695023,
-      "irr_gain_monthly": null,
+      "npv_gain_vnd": 466353532.3695023,
+      "irr_gain_monthly": 0.04396055974185506,
       "recommended_order_units": 0,
       "recommended_stock_units": 6,
       "break_even_capex_vnd": 683972080.3695023
