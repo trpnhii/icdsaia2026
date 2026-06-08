@@ -752,5 +752,523 @@ window.DASHBOARD_DATA = {
       "spare_purchase_cost_vnd": 0.0,
       "net_cost_delta_excl_revenue": 602634345.6533334
     }
-  ]
+  ],
+  "taskFlow": {
+    "prMatrix": {
+      "dates": [
+        "21-Apr",
+        "22-Apr",
+        "23-Apr",
+        "24-Apr",
+        "25-Apr",
+        "26-Apr",
+        "27-Apr",
+        "28-Apr",
+        "29-Apr",
+        "30-Apr"
+      ],
+      "rows": [
+        {
+          "label": "HF18 INV1",
+          "device_name": "HF18 Inverter 1",
+          "zone": 2,
+          "values": [
+            67.4,
+            70.6,
+            66.6,
+            66.2,
+            67.7,
+            67.5,
+            66.5,
+            66.0,
+            34.8,
+            20.3
+          ]
+        },
+        {
+          "label": "HF17 INV3",
+          "device_name": "HF17 Inverter 3",
+          "zone": 2,
+          "values": [
+            59.1,
+            61.5,
+            58.4,
+            59.1,
+            58.8,
+            59.8,
+            58.5,
+            58.8,
+            30.8,
+            19.2
+          ]
+        },
+        {
+          "label": "HF18 INV2",
+          "device_name": "HF18 Inverter 2",
+          "zone": 2,
+          "values": [
+            67.2,
+            70.4,
+            65.4,
+            66.0,
+            67.6,
+            67.3,
+            66.2,
+            65.6,
+            34.7,
+            20.3
+          ]
+        },
+        {
+          "label": "HF17 INV1",
+          "device_name": "HF17 Inverter 1",
+          "zone": 2,
+          "values": [
+            59.2,
+            61.8,
+            58.7,
+            59.8,
+            59.2,
+            60.2,
+            59.1,
+            59.4,
+            31.3,
+            19.2
+          ]
+        },
+        {
+          "label": "HF18 INV3",
+          "device_name": "HF18 Inverter 3",
+          "zone": 2,
+          "values": [
+            66.2,
+            69.3,
+            65.1,
+            65.1,
+            66.3,
+            66.4,
+            65.2,
+            64.4,
+            34.2,
+            20.2
+          ]
+        },
+        {
+          "label": "HF17 INV2",
+          "device_name": "HF17 Inverter 2",
+          "zone": 2,
+          "values": [
+            59.3,
+            61.6,
+            58.7,
+            59.0,
+            59.1,
+            59.6,
+            58.5,
+            58.4,
+            30.7,
+            19.1
+          ]
+        },
+        {
+          "label": "HF20 INV1",
+          "device_name": "HF20 Inverter 1",
+          "zone": 2,
+          "values": [
+            59.9,
+            62.6,
+            70.3,
+            67.6,
+            69.5,
+            69.7,
+            68.0,
+            67.6,
+            35.2,
+            20.0
+          ]
+        },
+        {
+          "label": "HF18 INV4",
+          "device_name": "HF18 Inverter 4",
+          "zone": 2,
+          "values": [
+            68.4,
+            72.3,
+            66.8,
+            67.6,
+            68.7,
+            68.7,
+            67.4,
+            67.3,
+            35.8,
+            20.4
+          ]
+        },
+        {
+          "label": "HF17 INV4",
+          "device_name": "HF17 Inverter 4",
+          "zone": 2,
+          "values": [
+            65.1,
+            67.9,
+            64.5,
+            64.4,
+            65.4,
+            65.3,
+            64.5,
+            64.8,
+            33.7,
+            19.7
+          ]
+        }
+      ]
+    },
+    "dailyAlarms": [
+      {
+        "date": "2026-04-01",
+        "alarm_count": 216,
+        "device_count": 217
+      },
+      {
+        "date": "2026-04-02",
+        "alarm_count": 216,
+        "device_count": 217
+      },
+      {
+        "date": "2026-04-03",
+        "alarm_count": 216,
+        "device_count": 217
+      },
+      {
+        "date": "2026-04-04",
+        "alarm_count": 217,
+        "device_count": 217
+      },
+      {
+        "date": "2026-04-05",
+        "alarm_count": 217,
+        "device_count": 217
+      },
+      {
+        "date": "2026-04-06",
+        "alarm_count": 216,
+        "device_count": 217
+      },
+      {
+        "date": "2026-04-07",
+        "alarm_count": 217,
+        "device_count": 217
+      },
+      {
+        "date": "2026-04-08",
+        "alarm_count": 217,
+        "device_count": 217
+      },
+      {
+        "date": "2026-04-09",
+        "alarm_count": 217,
+        "device_count": 217
+      },
+      {
+        "date": "2026-04-10",
+        "alarm_count": 217,
+        "device_count": 217
+      },
+      {
+        "date": "2026-04-11",
+        "alarm_count": 217,
+        "device_count": 217
+      },
+      {
+        "date": "2026-04-12",
+        "alarm_count": 217,
+        "device_count": 217
+      },
+      {
+        "date": "2026-04-13",
+        "alarm_count": 217,
+        "device_count": 217
+      },
+      {
+        "date": "2026-04-14",
+        "alarm_count": 142,
+        "device_count": 217
+      },
+      {
+        "date": "2026-04-15",
+        "alarm_count": 140,
+        "device_count": 217
+      },
+      {
+        "date": "2026-04-16",
+        "alarm_count": 166,
+        "device_count": 217
+      },
+      {
+        "date": "2026-04-17",
+        "alarm_count": 161,
+        "device_count": 217
+      },
+      {
+        "date": "2026-04-18",
+        "alarm_count": 156,
+        "device_count": 217
+      },
+      {
+        "date": "2026-04-19",
+        "alarm_count": 138,
+        "device_count": 217
+      },
+      {
+        "date": "2026-04-20",
+        "alarm_count": 165,
+        "device_count": 217
+      },
+      {
+        "date": "2026-04-21",
+        "alarm_count": 201,
+        "device_count": 217
+      },
+      {
+        "date": "2026-04-22",
+        "alarm_count": 185,
+        "device_count": 217
+      },
+      {
+        "date": "2026-04-23",
+        "alarm_count": 186,
+        "device_count": 217
+      },
+      {
+        "date": "2026-04-24",
+        "alarm_count": 205,
+        "device_count": 217
+      },
+      {
+        "date": "2026-04-25",
+        "alarm_count": 191,
+        "device_count": 217
+      },
+      {
+        "date": "2026-04-26",
+        "alarm_count": 193,
+        "device_count": 217
+      },
+      {
+        "date": "2026-04-27",
+        "alarm_count": 188,
+        "device_count": 217
+      },
+      {
+        "date": "2026-04-28",
+        "alarm_count": 184,
+        "device_count": 217
+      },
+      {
+        "date": "2026-04-29",
+        "alarm_count": 217,
+        "device_count": 217
+      },
+      {
+        "date": "2026-04-30",
+        "alarm_count": 217,
+        "device_count": 217
+      }
+    ],
+    "monthlyAbnormal": [
+      {
+        "month": 1,
+        "label": "Jan",
+        "quantity": 0
+      },
+      {
+        "month": 2,
+        "label": "Feb",
+        "quantity": 0
+      },
+      {
+        "month": 3,
+        "label": "Mar",
+        "quantity": 0
+      },
+      {
+        "month": 4,
+        "label": "Apr",
+        "quantity": 0
+      },
+      {
+        "month": 5,
+        "label": "May",
+        "quantity": 5
+      },
+      {
+        "month": 6,
+        "label": "Jun",
+        "quantity": 7
+      },
+      {
+        "month": 7,
+        "label": "Jul",
+        "quantity": 40
+      },
+      {
+        "month": 8,
+        "label": "Aug",
+        "quantity": 0
+      },
+      {
+        "month": 9,
+        "label": "Sep",
+        "quantity": 0
+      },
+      {
+        "month": 10,
+        "label": "Oct",
+        "quantity": 0
+      },
+      {
+        "month": 11,
+        "label": "Nov",
+        "quantity": 0
+      },
+      {
+        "month": 12,
+        "label": "Dec",
+        "quantity": 0
+      }
+    ],
+    "equipmentRows": [
+      {
+        "equipment": "HF18 INV1",
+        "pr_pct": 8.4,
+        "baseline_generation_loss_kwh": 7243.2,
+        "baseline_revenue_loss_vnd": 15229121.0,
+        "baseline_measure_cost_vnd": 761456.0,
+        "ai_generation_loss_kwh": 72.4,
+        "ai_revenue_loss_vnd": 152291.0,
+        "ai_measure_cost_vnd": 833333.0
+      },
+      {
+        "equipment": "HF17 INV3",
+        "pr_pct": 8.3,
+        "baseline_generation_loss_kwh": 7243.2,
+        "baseline_revenue_loss_vnd": 15229121.0,
+        "baseline_measure_cost_vnd": 761456.0,
+        "ai_generation_loss_kwh": 72.4,
+        "ai_revenue_loss_vnd": 152291.0,
+        "ai_measure_cost_vnd": 833333.0
+      },
+      {
+        "equipment": "HF18 INV2",
+        "pr_pct": 1.6,
+        "baseline_generation_loss_kwh": 7243.2,
+        "baseline_revenue_loss_vnd": 15229121.0,
+        "baseline_measure_cost_vnd": 761456.0,
+        "ai_generation_loss_kwh": 72.4,
+        "ai_revenue_loss_vnd": 152291.0,
+        "ai_measure_cost_vnd": 833333.0
+      },
+      {
+        "equipment": "HF17 INV1",
+        "pr_pct": 0.0,
+        "baseline_generation_loss_kwh": 7243.2,
+        "baseline_revenue_loss_vnd": 15229121.0,
+        "baseline_measure_cost_vnd": 761456.0,
+        "ai_generation_loss_kwh": 72.4,
+        "ai_revenue_loss_vnd": 152291.0,
+        "ai_measure_cost_vnd": 833333.0
+      },
+      {
+        "equipment": "HF18 INV3",
+        "pr_pct": 1.9,
+        "baseline_generation_loss_kwh": 7243.2,
+        "baseline_revenue_loss_vnd": 15229121.0,
+        "baseline_measure_cost_vnd": 761456.0,
+        "ai_generation_loss_kwh": 72.4,
+        "ai_revenue_loss_vnd": 152291.0,
+        "ai_measure_cost_vnd": 833333.0
+      },
+      {
+        "equipment": "HF17 INV2",
+        "pr_pct": 0.0,
+        "baseline_generation_loss_kwh": 7243.2,
+        "baseline_revenue_loss_vnd": 15229121.0,
+        "baseline_measure_cost_vnd": 761456.0,
+        "ai_generation_loss_kwh": 72.4,
+        "ai_revenue_loss_vnd": 152291.0,
+        "ai_measure_cost_vnd": 833333.0
+      },
+      {
+        "equipment": "HF20 INV1",
+        "pr_pct": 8.4,
+        "baseline_generation_loss_kwh": 7243.2,
+        "baseline_revenue_loss_vnd": 15229121.0,
+        "baseline_measure_cost_vnd": 761456.0,
+        "ai_generation_loss_kwh": 72.4,
+        "ai_revenue_loss_vnd": 152291.0,
+        "ai_measure_cost_vnd": 833333.0
+      },
+      {
+        "equipment": "HF18 INV4",
+        "pr_pct": 3.4,
+        "baseline_generation_loss_kwh": 7243.2,
+        "baseline_revenue_loss_vnd": 15229121.0,
+        "baseline_measure_cost_vnd": 761456.0,
+        "ai_generation_loss_kwh": 72.4,
+        "ai_revenue_loss_vnd": 152291.0,
+        "ai_measure_cost_vnd": 833333.0
+      },
+      {
+        "equipment": "HF17 INV4",
+        "pr_pct": 0.0,
+        "baseline_generation_loss_kwh": 7243.2,
+        "baseline_revenue_loss_vnd": 15229121.0,
+        "baseline_measure_cost_vnd": 761456.0,
+        "ai_generation_loss_kwh": 72.4,
+        "ai_revenue_loss_vnd": 152291.0,
+        "ai_measure_cost_vnd": 833333.0
+      }
+    ],
+    "operationalTotals": {
+      "baseline_generation_loss_kwh": 65188.8,
+      "baseline_revenue_loss_vnd": 137062089.0,
+      "baseline_measure_cost_vnd": 6853104.0,
+      "ai_generation_loss_kwh": 651.6,
+      "ai_revenue_loss_vnd": 1370619.0,
+      "ai_measure_cost_vnd": 7499997.0
+    },
+    "scenarioComparison": [
+      {
+        "scenario": "Without AI",
+        "npv_vnd": 0.0,
+        "irr_monthly": null,
+        "irr_annual": null
+      },
+      {
+        "scenario": "With AI",
+        "npv_vnd": 683972080.3695023,
+        "irr_monthly": 1.5887114610838464,
+        "irr_annual": 90573.0437808044
+      }
+    ],
+    "scenarioVariance": {
+      "npv_vnd": 683972080.3695023,
+      "irr_monthly": null
+    },
+    "inventoryDecision": {
+      "demand_devices": 15,
+      "current_stock_units": 10,
+      "recommended_stock_units": 6,
+      "order_quantity": 0,
+      "max_daily_candidates": 6
+    },
+    "summary": {
+      "money_saved_vnd": 772091316.016,
+      "npv_gain_vnd": 683972080.3695023,
+      "irr_gain_monthly": null,
+      "recommended_order_units": 0,
+      "recommended_stock_units": 6,
+      "break_even_capex_vnd": 683972080.3695023
+    }
+  }
 };

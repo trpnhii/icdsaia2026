@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI O&M Dashboard</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark">AI</span>
+          <div>
+            <strong>O&M Control</strong>
+            <span>Solar inverter fleet</span>
+          </div>
+        </div>
+        <nav class="nav" aria-label="Dashboard tabs">
+          <a class="active" href="#" data-tab="overview">Overview</a>
+          <a href="#" data-tab="taskflow">Task Flow &amp; Report</a>
+        </nav>
+        <div class="side-note">
+          <span>Latest scored date</span>
+          <strong id="latestDate">-</strong>
+        </div>
+      </aside>
+
+      <main class="content">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow" id="topEyebrow">Weekly decision dashboard</p>
+            <h1 id="topTitle">AI predictive maintenance summary</h1>
+          </div>
+          <div class="toolbar">
+            <button type="button" id="refreshButton" title="Re-render dashboard">Refresh</button>
+          </div>
+        </header>
+
+        <section id="overview-panel" class="tab-panel active" data-panel="overview">
+          <section class="kpi-grid" aria-label="Key metrics">
+            <article class="kpi">
+              <span>AI NPV</span>
+              <strong id="npvValue">-</strong>
+              <small>after included CAPEX</small>
+            </article>
+            <article class="kpi">
+              <span>Monthly IRR</span>
+              <strong id="irrValue">-</strong>
+              <small>scenario basis</small>
+            </article>
+            <article class="kpi">
+              <span>Optimal stock</span>
+              <strong id="optimalN">-</strong>
+              <small>spare inverters</small>
+            </article>
+            <article class="kpi">
+              <span>Candidate-days</span>
+              <strong id="candidateDays">-</strong>
+              <small>replacement signals</small>
+            </article>
+          </section>
+
+          <section class="layout-grid">
+            <article class="panel panel-wide">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Financials</p>
+                  <h2>Cumulative NPV timeline</h2>
+                </div>
+                <span id="capexLabel" class="status-chip">CAPEX -</span>
+              </div>
+              <div class="chart-wrap">
+                <svg id="npvChart" viewBox="0 0 760 260" role="img" aria-label="NPV timeline chart"></svg>
+              </div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Forecast</p>
+                  <h2>30-day expected failures</h2>
+                </div>
+              </div>
+              <div class="chart-wrap compact">
+                <svg id="forecastChart" viewBox="0 0 360 220" role="img" aria-label="Failure forecast chart"></svg>
+              </div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Inventory</p>
+                  <h2>Optimal N cost curve</h2>
+                </div>
+              </div>
+              <div class="chart-wrap compact">
+                <svg id="inventoryChart" viewBox="0 0 360 220" role="img" aria-label="Inventory cost curve chart"></svg>
+              </div>
+            </article>
+          </section>
+
+          <section class="layout-grid bottom-grid">
+            <article class="panel panel-wide">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Risk queue</p>
+                  <h2>Latest candidate week</h2>
+                </div>
+                <span id="riskCount" class="status-chip">0 rows</span>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Zone</th>
+                      <th>Device</th>
+                      <th>Risk</th>
+                      <th>Window</th>
+                      <th>Rel PR 14d</th>
+                      <th>Severe low 14d</th>
+                    </tr>
+                  </thead>
+                  <tbody id="candidateRows"></tbody>
+                </table>
+              </div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Monthly savings</p>
+                  <h2>Operational benefit</h2>
+                </div>
+              </div>
+              <div id="savingsList" class="savings-list"></div>
+            </article>
+          </section>
+        </section>
+
+        <section id="taskflow-panel" class="tab-panel" data-panel="taskflow" hidden>
+          <section class="taskflow-grid">
+            <article class="panel panel-wide">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Outcome No1</p>
+                  <h2>Performance ratio</h2>
+                </div>
+                <span class="status-chip">Daily alarm threshold &lt; 70%</span>
+              </div>
+              <div class="taskflow-split">
+                <div class="table-wrap">
+                  <table class="pr-matrix" id="prMatrixTable">
+                    <thead id="prMatrixHead"></thead>
+                    <tbody id="prMatrixBody"></tbody>
+                  </table>
+                </div>
+                <div class="chart-wrap compact">
+                  <svg id="prDeviceChart" viewBox="0 0 360 220" role="img" aria-label="Device PR chart"></svg>
+                </div>
+              </div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Daily alarm</p>
+                  <h2>PR below 70%</h2>
+                </div>
+              </div>
+              <div class="chart-wrap compact">
+                <svg id="alarmChart" viewBox="0 0 360 220" role="img" aria-label="Daily alarm chart"></svg>
+              </div>
+            </article>
+          </section>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Traditional vs AI</p>
+                <h2>Operational comparison by equipment</h2>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table class="comparison-table">
+                <thead>
+                  <tr>
+                    <th rowspan="2">Equipment</th>
+                    <th rowspan="2">PR (%)</th>
+                    <th colspan="3">Traditional method</th>
+                    <th colspan="3">AI applied method</th>
+                  </tr>
+                  <tr>
+                    <th>Generation loss (kWh)</th>
+                    <th>Revenue loss (VND)</th>
+                    <th>Measure cost (VND)</th>
+                    <th>Generation loss (kWh)</th>
+                    <th>Revenue loss (VND)</th>
+                    <th>Measure cost (VND)</th>
+                  </tr>
+                </thead>
+                <tbody id="equipmentComparisonRows"></tbody>
+                <tfoot id="equipmentComparisonTotals"></tfoot>
+              </table>
+            </div>
+          </section>
+
+          <section class="taskflow-grid">
+            <article class="panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Outcome No2</p>
+                  <h2>Purchasing schedule</h2>
+                </div>
+              </div>
+              <div class="chart-wrap compact">
+                <svg id="purchaseChart" viewBox="0 0 360 220" role="img" aria-label="Monthly abnormal inverter chart"></svg>
+              </div>
+              <div class="table-wrap compact-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Month</th>
+                      <th>Abnormal INV quantity</th>
+                    </tr>
+                  </thead>
+                  <tbody id="monthlyAbnormalRows"></tbody>
+                </table>
+              </div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Inventory decision</p>
+                  <h2>Spare inverter recommendation</h2>
+                </div>
+              </div>
+              <div class="decision-list" id="inventoryDecisionList"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">FM output</p>
+                  <h2>IRR and NPV comparison</h2>
+                </div>
+              </div>
+              <div class="table-wrap compact-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Scenario</th>
+                      <th>IRR (monthly)</th>
+                      <th>NPV (VND)</th>
+                    </tr>
+                  </thead>
+                  <tbody id="scenarioComparisonRows"></tbody>
+                  <tfoot id="scenarioVarianceRow"></tfoot>
+                </table>
+              </div>
+            </article>
+          </section>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Conclusion</p>
+                <h2>Management summary</h2>
+              </div>
+            </div>
+            <ul class="conclusion-list" id="conclusionList"></ul>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <script src="data.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
