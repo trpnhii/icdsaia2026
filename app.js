@@ -65,7 +65,10 @@ function drawLineChart(svgId, rows, xKey, yKey, options = {}) {
   svg.innerHTML = "";
   const width = Number(svg.viewBox.baseVal.width);
   const height = Number(svg.viewBox.baseVal.height);
-  const pad = { left: 44, right: 18, top: 18, bottom: 36 };
+  const compact = Boolean(options.compact);
+  const pad = compact
+    ? { left: 34, right: 10, top: 10, bottom: 22 }
+    : { left: 44, right: 18, top: 18, bottom: 36 };
   const xVals = options.useIndex
     ? rows.map((_, index) => index)
     : rows.map((row, index) => xAxisValue(row, xKey, index));
@@ -94,7 +97,7 @@ function drawLineChart(svgId, rows, xKey, yKey, options = {}) {
     "beforeend",
     `<polyline class="line ${options.alt ? "alt" : ""}" points="${points}"></polyline>`
   );
-  if (rows.length <= 14) {
+  if (!compact && rows.length <= 14) {
     rows.forEach((row, index) => {
       svg.insertAdjacentHTML(
         "beforeend",
@@ -103,24 +106,28 @@ function drawLineChart(svgId, rows, xKey, yKey, options = {}) {
     });
   }
 
-  const first = rows[0];
-  const last = rows[rows.length - 1];
-  const firstLabel =
-    first.calendar_month || first.forecast_date || formatAxisLabel(xVals[0], first, xKey);
-  const lastLabel =
-    last.calendar_month || last.forecast_date || formatAxisLabel(xVals[rows.length - 1], last, xKey);
-  svg.insertAdjacentHTML(
-    "beforeend",
-    `<text x="${pad.left}" y="${height - 10}" font-size="11" fill="#697586">${firstLabel}</text>`
-  );
-  svg.insertAdjacentHTML(
-    "beforeend",
-    `<text x="${width - pad.right}" y="${height - 10}" font-size="11" fill="#697586" text-anchor="end">${lastLabel}</text>`
-  );
-  svg.insertAdjacentHTML(
-    "beforeend",
-    `<text x="${pad.left}" y="${pad.top - 4}" font-size="11" fill="#697586">${options.label || ""}</text>`
-  );
+  if (!compact) {
+    const first = rows[0];
+    const last = rows[rows.length - 1];
+    const firstLabel =
+      first.calendar_month || first.forecast_date || formatAxisLabel(xVals[0], first, xKey);
+    const lastLabel =
+      last.calendar_month || last.forecast_date || formatAxisLabel(xVals[rows.length - 1], last, xKey);
+    svg.insertAdjacentHTML(
+      "beforeend",
+      `<text x="${pad.left}" y="${height - 8}" font-size="10" fill="#697586">${firstLabel}</text>`
+    );
+    svg.insertAdjacentHTML(
+      "beforeend",
+      `<text x="${width - pad.right}" y="${height - 8}" font-size="10" fill="#697586" text-anchor="end">${lastLabel}</text>`
+    );
+  }
+  if (options.label) {
+    svg.insertAdjacentHTML(
+      "beforeend",
+      `<text x="${pad.left}" y="${pad.top - 2}" font-size="10" fill="#697586">${options.label}</text>`
+    );
+  }
 }
 
 function drawBarChart(svgId, rows, xKey, yKey, optimalN) {
@@ -157,19 +164,77 @@ function drawBarChart(svgId, rows, xKey, yKey, optimalN) {
   });
 }
 
+function drawSparkBars(svgId, rows, yKey, options = {}) {
+  const svg = document.getElementById(svgId);
+  if (!svg || !rows.length) return;
+  svg.innerHTML = "";
+  const width = Number(svg.viewBox.baseVal.width);
+  const height = Number(svg.viewBox.baseVal.height);
+  const pad = { left: 32, right: 8, top: 6, bottom: 16 };
+  const values = rows.map((row) => Number(row[yKey] || 0));
+  const maxVal = Math.max(...values, 1);
+  const chartW = width - pad.left - pad.right;
+  const slotW = chartW / rows.length;
+  const barW = Math.max(3, Math.min(8, slotW - 1));
+  const y = (value) => height - pad.bottom - (value / maxVal) * (height - pad.top - pad.bottom);
+
+  for (let i = 0; i < 3; i += 1) {
+    const gy = pad.top + ((height - pad.top - pad.bottom) / 2) * i;
+    svg.insertAdjacentHTML(
+      "beforeend",
+      `<line class="grid-line" x1="${pad.left}" y1="${gy}" x2="${width - pad.right}" y2="${gy}"></line>`
+    );
+  }
+  svg.insertAdjacentHTML(
+    "beforeend",
+    `<line class="axis" x1="${pad.left}" y1="${height - pad.bottom}" x2="${width - pad.right}" y2="${height - pad.bottom}"></line>`
+  );
+  rows.forEach((row, index) => {
+    const value = Number(row[yKey] || 0);
+    const x = pad.left + index * slotW + (slotW - barW) / 2;
+    const barH = height - pad.bottom - y(value);
+    svg.insertAdjacentHTML(
+      "beforeend",
+      `<rect class="bar alt-bar" x="${x}" y="${y(value)}" width="${barW}" height="${barH}" rx="1"></rect>`
+    );
+  });
+  if (options.firstLabel || options.lastLabel) {
+    svg.insertAdjacentHTML(
+      "beforeend",
+      `<text x="${pad.left}" y="${height - 4}" font-size="9" fill="#697586">${options.firstLabel || ""}</text>`
+    );
+    svg.insertAdjacentHTML(
+      "beforeend",
+      `<text x="${width - pad.right}" y="${height - 4}" font-size="9" fill="#697586" text-anchor="end">${options.lastLabel || ""}</text>`
+    );
+  }
+}
+
 function drawMultiLineChart(svgId, series, options = {}) {
   const svg = document.getElementById(svgId);
   if (!svg || !series.length || !series[0].values.length) return;
   svg.innerHTML = "";
   const width = Number(svg.viewBox.baseVal.width);
   const height = Number(svg.viewBox.baseVal.height);
-  const pad = { left: 42, right: 16, top: 18, bottom: 34 };
+  const compact = Boolean(options.compact);
+  const pad = compact
+    ? { left: 32, right: 8, top: 6, bottom: 16 }
+    : { left: 42, right: 16, top: 18, bottom: 34 };
   const pointCount = series[0].values.length;
   const allValues = series.flatMap((item) => item.values.filter((value) => value !== null));
   const x = makeScaler([...Array(pointCount).keys()], pad.left, width - pad.right);
   const y = makeScaler(allValues, height - pad.bottom, pad.top);
   const colors = ["#2563eb", "#0f766e", "#b45309", "#b42318", "#756bb1"];
 
+  if (compact) {
+    for (let i = 0; i < 3; i += 1) {
+      const gy = pad.top + ((height - pad.top - pad.bottom) / 2) * i;
+      svg.insertAdjacentHTML(
+        "beforeend",
+        `<line class="grid-line" x1="${pad.left}" y1="${gy}" x2="${width - pad.right}" y2="${gy}"></line>`
+      );
+    }
+  }
   svg.insertAdjacentHTML(
     "beforeend",
     `<line class="axis" x1="${pad.left}" y1="${height - pad.bottom}" x2="${width - pad.right}" y2="${height - pad.bottom}"></line>`
@@ -178,12 +243,19 @@ function drawMultiLineChart(svgId, series, options = {}) {
     "beforeend",
     `<line class="axis" x1="${pad.left}" y1="${pad.top}" x2="${pad.left}" y2="${height - pad.bottom}"></line>`
   );
-  svg.insertAdjacentHTML(
-    "beforeend",
-    `<line class="grid-line" x1="${pad.left}" y1="${y(70)}" x2="${width - pad.right}" y2="${y(70)}" stroke-dasharray="4 4"></line>`
-  );
+  if (!compact) {
+    svg.insertAdjacentHTML(
+      "beforeend",
+      `<line class="grid-line" x1="${pad.left}" y1="${y(70)}" x2="${width - pad.right}" y2="${y(70)}" stroke-dasharray="4 4"></line>`
+    );
+  } else if (allValues.length) {
+    svg.insertAdjacentHTML(
+      "beforeend",
+      `<line class="grid-line" x1="${pad.left}" y1="${y(70)}" x2="${width - pad.right}" y2="${y(70)}" stroke-dasharray="4 4"></line>`
+    );
+  }
 
-  series.slice(0, 4).forEach((item, seriesIndex) => {
+  series.slice(0, compact ? 3 : 4).forEach((item, seriesIndex) => {
     const points = item.values
       .map((value, index) => (value === null ? null : `${x(index)},${y(value)}`))
       .filter(Boolean)
@@ -191,13 +263,25 @@ function drawMultiLineChart(svgId, series, options = {}) {
     if (!points) return;
     svg.insertAdjacentHTML(
       "beforeend",
-      `<polyline class="line" points="${points}" stroke="${colors[seriesIndex % colors.length]}"></polyline>`
+      `<polyline class="line ${compact ? "compact-line" : ""}" points="${points}" stroke="${colors[seriesIndex % colors.length]}" stroke-width="${compact ? 1.8 : 3}"></polyline>`
     );
   });
-  svg.insertAdjacentHTML(
-    "beforeend",
-    `<text x="${pad.left}" y="${pad.top - 4}" font-size="11" fill="#697586">${options.label || ""}</text>`
-  );
+  if (options.xLabels?.length) {
+    svg.insertAdjacentHTML(
+      "beforeend",
+      `<text x="${pad.left}" y="${height - 4}" font-size="9" fill="#697586">${options.xLabels[0]}</text>`
+    );
+    svg.insertAdjacentHTML(
+      "beforeend",
+      `<text x="${width - pad.right}" y="${height - 4}" font-size="9" fill="#697586" text-anchor="end">${options.xLabels[options.xLabels.length - 1]}</text>`
+    );
+  }
+  if (options.label) {
+    svg.insertAdjacentHTML(
+      "beforeend",
+      `<text x="${pad.left}" y="${pad.top - 2}" font-size="10" fill="#697586">${options.label}</text>`
+    );
+  }
 }
 
 function switchTab(tabName) {
@@ -421,14 +505,19 @@ function renderTaskFlow() {
   renderInventoryDecision();
   renderConclusions();
 
+  const prDates = taskFlow.prMatrix?.dates || [];
   const prSeries = (taskFlow.prMatrix?.rows || []).slice(0, 4).map((row) => ({
     label: row.label,
     values: row.values,
   }));
-  drawMultiLineChart("prDeviceChart", prSeries);
-  drawLineChart("alarmChart", taskFlow.dailyAlarms || [], "date", "alarm_count", {
-    alt: true,
-    useIndex: true,
+  const alarmRows = (taskFlow.dailyAlarms || []).slice(-14);
+  drawMultiLineChart("prDeviceChart", prSeries, {
+    compact: true,
+    xLabels: prDates,
+  });
+  drawSparkBars("alarmChart", alarmRows, "alarm_count", {
+    firstLabel: alarmRows[0]?.date?.slice(5) || "",
+    lastLabel: alarmRows[alarmRows.length - 1]?.date?.slice(5) || "",
   });
   drawBarChart("purchaseChart", taskFlow.monthlyAbnormal || [], "month", "quantity");
 }
