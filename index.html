@@ -140,40 +140,31 @@
         </section>
 
         <section id="taskflow-panel" class="tab-panel" data-panel="taskflow" hidden>
-          <section class="taskflow-grid">
-            <article class="panel panel-wide">
-              <div class="panel-heading">
-                <div>
-                  <p class="eyebrow">Outcome No1</p>
-                  <h2>Performance ratio</h2>
-                </div>
-                <span class="status-chip">Daily alarm threshold &lt; 70%</span>
+          <article class="panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Outcome No1</p>
+                <h2>Performance ratio</h2>
               </div>
-              <div class="taskflow-split">
-                <div class="table-wrap">
-                  <table class="pr-matrix" id="prMatrixTable">
-                    <thead id="prMatrixHead"></thead>
-                    <tbody id="prMatrixBody"></tbody>
-                  </table>
-                </div>
-                <div class="chart-wrap compact">
-                  <svg id="prDeviceChart" viewBox="0 0 360 220" role="img" aria-label="Device PR chart"></svg>
-                </div>
+              <span class="status-chip">Daily alarm threshold &lt; 70%</span>
+            </div>
+            <div class="table-wrap table-wrap-full">
+              <table class="pr-matrix full-width" id="prMatrixTable">
+                <thead id="prMatrixHead"></thead>
+                <tbody id="prMatrixBody"></tbody>
+              </table>
+            </div>
+            <div class="taskflow-charts">
+              <div class="chart-wrap">
+                <svg id="prDeviceChart" viewBox="0 0 760 240" role="img" aria-label="Device PR chart"></svg>
               </div>
-            </article>
-
-            <article class="panel">
-              <div class="panel-heading">
-                <div>
-                  <p class="eyebrow">Daily alarm</p>
-                  <h2>PR below 70%</h2>
-                </div>
+              <div class="chart-wrap">
+                <p class="chart-caption">Daily alarm</p>
+                <h3 class="chart-subtitle">PR below 70%</h3>
+                <svg id="alarmChart" viewBox="0 0 760 240" role="img" aria-label="Daily alarm chart"></svg>
               </div>
-              <div class="chart-wrap compact">
-                <svg id="alarmChart" viewBox="0 0 360 220" role="img" aria-label="Daily alarm chart"></svg>
-              </div>
-            </article>
-          </section>
+            </div>
+          </article>
 
           <section class="panel">
             <div class="panel-heading">

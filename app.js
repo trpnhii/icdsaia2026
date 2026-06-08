@@ -26,12 +26,32 @@ function setText(id, value) {
 }
 
 function scale(values, minOut, maxOut) {
-  const min = Math.min(...values);
-  const max = Math.max(...values);
+  const finite = values.filter((value) => Number.isFinite(value));
+  const min = finite.length ? Math.min(...finite) : 0;
+  const max = finite.length ? Math.max(...finite) : 1;
   return (value) => {
-    if (max === min) return (minOut + maxOut) / 2;
+    if (!Number.isFinite(value) || max === min) return (minOut + maxOut) / 2;
     return minOut + ((value - min) / (max - min)) * (maxOut - minOut);
   };
+}
+
+function xAxisValue(row, xKey, index) {
+  const raw = row[xKey];
+  if (raw === null || raw === undefined || raw === "") return index;
+  const numeric = Number(raw);
+  if (Number.isFinite(numeric)) return numeric;
+  const parsed = Date.parse(String(raw));
+  if (Number.isFinite(parsed)) return parsed;
+  return index;
+}
+
+function formatAxisLabel(value, row, xKey) {
+  const raw = row?.[xKey];
+  if (raw === null || raw === undefined || raw === "") return String(value);
+  if (Number.isFinite(Date.parse(String(raw)))) {
+    return String(raw).slice(0, 10);
+  }
+  return String(raw);
 }
 
 function drawLineChart(svgId, rows, xKey, yKey, options = {}) {
@@ -41,7 +61,7 @@ function drawLineChart(svgId, rows, xKey, yKey, options = {}) {
   const width = Number(svg.viewBox.baseVal.width);
   const height = Number(svg.viewBox.baseVal.height);
   const pad = { left: 44, right: 18, top: 18, bottom: 36 };
-  const xVals = rows.map((row, index) => Number(row[xKey] ?? index + 1));
+  const xVals = rows.map((row, index) => xAxisValue(row, xKey, index));
   const yVals = rows.map((row) => Number(row[yKey] || 0));
   const x = scale(xVals, pad.left, width - pad.right);
   const y = scale(yVals, height - pad.bottom, pad.top);
@@ -76,13 +96,17 @@ function drawLineChart(svgId, rows, xKey, yKey, options = {}) {
 
   const first = rows[0];
   const last = rows[rows.length - 1];
+  const firstLabel =
+    first.calendar_month || first.forecast_date || formatAxisLabel(xVals[0], first, xKey);
+  const lastLabel =
+    last.calendar_month || last.forecast_date || formatAxisLabel(xVals[rows.length - 1], last, xKey);
   svg.insertAdjacentHTML(
     "beforeend",
-    `<text x="${pad.left}" y="${height - 10}" font-size="11" fill="#697586">${first.calendar_month || first.forecast_date || first.date || first[xKey]}</text>`
+    `<text x="${pad.left}" y="${height - 10}" font-size="11" fill="#697586">${firstLabel}</text>`
   );
   svg.insertAdjacentHTML(
     "beforeend",
-    `<text x="${width - pad.right}" y="${height - 10}" font-size="11" fill="#697586" text-anchor="end">${last.calendar_month || last.forecast_date || last.date || last[xKey]}</text>`
+    `<text x="${width - pad.right}" y="${height - 10}" font-size="11" fill="#697586" text-anchor="end">${lastLabel}</text>`
   );
   svg.insertAdjacentHTML(
     "beforeend",
@@ -99,7 +123,8 @@ function drawBarChart(svgId, rows, xKey, yKey, optimalN) {
   const pad = { left: 42, right: 16, top: 16, bottom: 34 };
   const maxVal = Math.max(...rows.map((row) => Number(row[yKey] || 0)), 1);
   const chartW = width - pad.left - pad.right;
-  const barW = Math.max(16, chartW / rows.length - 8);
+  const slotW = chartW / rows.length;
+  const barW = Math.max(8, Math.min(24, slotW - 6));
   const y = (value) => height - pad.bottom - (Number(value || 0) / maxVal) * (height - pad.top - pad.bottom);
 
   svg.insertAdjacentHTML(
@@ -107,17 +132,19 @@ function drawBarChart(svgId, rows, xKey, yKey, optimalN) {
     `<line class="axis" x1="${pad.left}" y1="${height - pad.bottom}" x2="${width - pad.right}" y2="${height - pad.bottom}"></line>`
   );
   rows.forEach((row, index) => {
-    const x = pad.left + index * (chartW / rows.length) + 3;
+    const x = pad.left + index * slotW + (slotW - barW) / 2;
     const barH = height - pad.bottom - y(row[yKey]);
     const cls = Number(row[xKey]) === Number(optimalN) ? "bar optimal" : "bar";
     svg.insertAdjacentHTML(
       "beforeend",
       `<rect class="${cls}" x="${x}" y="${y(row[yKey])}" width="${barW}" height="${barH}" rx="3"></rect>`
     );
-    svg.insertAdjacentHTML(
-      "beforeend",
-      `<text x="${x + barW / 2}" y="${height - 12}" font-size="10" text-anchor="middle" fill="#697586">${row.label || row[xKey]}</text>`
-    );
+    if (rows.length <= 12) {
+      svg.insertAdjacentHTML(
+        "beforeend",
+        `<text x="${x + barW / 2}" y="${height - 12}" font-size="10" text-anchor="middle" fill="#697586">${row.label || row[xKey]}</text>`
+      );
+    }
   });
 }
 
