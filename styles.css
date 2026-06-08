@@ -358,11 +358,21 @@ th {
   gap: 14px;
 }
 
-.taskflow-charts {
+.taskflow-charts-row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
   margin-top: 14px;
+}
+
+.chart-wrap-side {
+  min-height: 0;
+  max-height: 220px;
+  padding: 10px 12px;
+}
+
+.chart-wrap-side svg {
+  max-height: 180px;
 }
 
 .table-wrap-full {
@@ -469,16 +479,12 @@ th {
 }
 
 .chart-caption {
-  margin: 0 0 4px;
+  margin: 0 0 6px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
-}
-
-.chart-subtitle {
-  margin: 0 0 10px;
-  font-size: 15px;
+  letter-spacing: 0.02em;
 }
 
 @media (max-width: 980px) {
@@ -493,7 +499,7 @@ th {
   .kpi-grid,
   .layout-grid,
   .taskflow-grid,
-  .taskflow-charts {
+  .taskflow-charts-row {
     grid-template-columns: 1fr;
   }
 

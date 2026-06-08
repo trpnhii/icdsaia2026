@@ -25,12 +25,17 @@ function setText(id, value) {
   if (el) el.textContent = value;
 }
 
-function scale(values, minOut, maxOut) {
+function makeScaler(values, minOut, maxOut, padFlat = 0.12) {
   const finite = values.filter((value) => Number.isFinite(value));
-  const min = finite.length ? Math.min(...finite) : 0;
-  const max = finite.length ? Math.max(...finite) : 1;
+  let min = finite.length ? Math.min(...finite) : 0;
+  let max = finite.length ? Math.max(...finite) : 1;
+  if (min === max) {
+    const pad = Math.max(Math.abs(min) * padFlat, 1);
+    min -= pad;
+    max += pad;
+  }
   return (value) => {
-    if (!Number.isFinite(value) || max === min) return (minOut + maxOut) / 2;
+    if (!Number.isFinite(value)) return (minOut + maxOut) / 2;
     return minOut + ((value - min) / (max - min)) * (maxOut - minOut);
   };
 }
@@ -61,10 +66,12 @@ function drawLineChart(svgId, rows, xKey, yKey, options = {}) {
   const width = Number(svg.viewBox.baseVal.width);
   const height = Number(svg.viewBox.baseVal.height);
   const pad = { left: 44, right: 18, top: 18, bottom: 36 };
-  const xVals = rows.map((row, index) => xAxisValue(row, xKey, index));
+  const xVals = options.useIndex
+    ? rows.map((_, index) => index)
+    : rows.map((row, index) => xAxisValue(row, xKey, index));
   const yVals = rows.map((row) => Number(row[yKey] || 0));
-  const x = scale(xVals, pad.left, width - pad.right);
-  const y = scale(yVals, height - pad.bottom, pad.top);
+  const x = makeScaler(xVals, pad.left, width - pad.right);
+  const y = makeScaler(yVals, height - pad.bottom, pad.top);
 
   for (let i = 0; i < 4; i += 1) {
     const gy = pad.top + ((height - pad.top - pad.bottom) / 3) * i;
@@ -87,12 +94,14 @@ function drawLineChart(svgId, rows, xKey, yKey, options = {}) {
     "beforeend",
     `<polyline class="line ${options.alt ? "alt" : ""}" points="${points}"></polyline>`
   );
-  rows.forEach((row, index) => {
-    svg.insertAdjacentHTML(
-      "beforeend",
-      `<circle class="dot" cx="${x(xVals[index])}" cy="${y(Number(row[yKey] || 0))}" r="4"></circle>`
-    );
-  });
+  if (rows.length <= 14) {
+    rows.forEach((row, index) => {
+      svg.insertAdjacentHTML(
+        "beforeend",
+        `<circle class="dot" cx="${x(xVals[index])}" cy="${y(Number(row[yKey] || 0))}" r="3"></circle>`
+      );
+    });
+  }
 
   const first = rows[0];
   const last = rows[rows.length - 1];
@@ -157,8 +166,8 @@ function drawMultiLineChart(svgId, series, options = {}) {
   const pad = { left: 42, right: 16, top: 18, bottom: 34 };
   const pointCount = series[0].values.length;
   const allValues = series.flatMap((item) => item.values.filter((value) => value !== null));
-  const x = scale([...Array(pointCount).keys()], pad.left, width - pad.right);
-  const y = scale(allValues, height - pad.bottom, pad.top);
+  const x = makeScaler([...Array(pointCount).keys()], pad.left, width - pad.right);
+  const y = makeScaler(allValues, height - pad.bottom, pad.top);
   const colors = ["#2563eb", "#0f766e", "#b45309", "#b42318", "#756bb1"];
 
   svg.insertAdjacentHTML(
@@ -416,10 +425,10 @@ function renderTaskFlow() {
     label: row.label,
     values: row.values,
   }));
-  drawMultiLineChart("prDeviceChart", prSeries, { label: "Device PR (%)" });
+  drawMultiLineChart("prDeviceChart", prSeries);
   drawLineChart("alarmChart", taskFlow.dailyAlarms || [], "date", "alarm_count", {
     alt: true,
-    label: "Daily alarms < 70%",
+    useIndex: true,
   });
   drawBarChart("purchaseChart", taskFlow.monthlyAbnormal || [], "month", "quantity");
 }
