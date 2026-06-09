@@ -1,0 +1,20 @@
+{
+  "notes": "Recalibrated for mixed fleet health: absolute risk_score stays strict, with an acute 14-day path when a device is persistently worst-in-fleet on short-window severe-low days.",
+  "replacement_candidate": {
+    "risk_score_within_14_days": 70,
+    "risk_score_within_30_days": 55,
+    "severe_low_rate_14d": 0.5,
+    "mean_deficit_14d": 0.55,
+    "projected_relative_pr_14d": 0.45,
+    "severe_low_rate_30d": 0.35,
+    "mean_deficit_30d": 0.4,
+    "projected_relative_pr_30d": 0.6,
+    "acute_14d": {
+      "enabled": true,
+      "severe_low_rate_14d": 0.5,
+      "fleet_relative_risk_score": 92,
+      "min_valid_days_14d": 5
+    },
+    "monitor_risk_score": 40
+  }
+}

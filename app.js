@@ -21,6 +21,33 @@ function pct(value) {
   return `${(Number(value || 0) * 100).toFixed(2)}%`;
 }
 
+function computeIrr(cashflows) {
+  // cashflows: array where index is month (0 = now)
+  if (!cashflows || !cashflows.length) return null;
+  const anyPos = cashflows.some((c) => c > 0);
+  const anyNeg = cashflows.some((c) => c < 0);
+  if (!anyPos || !anyNeg) return null;
+  const npvAt = (rate) => cashflows.reduce((s, cf, i) => s + cf / Math.pow(1 + rate, i), 0);
+  let low = -0.999999;
+  let high = 10.0;
+  let lowVal = npvAt(low);
+  let highVal = npvAt(high);
+  if (lowVal * highVal > 0) return null;
+  for (let i = 0; i < 200; i += 1) {
+    const mid = (low + high) / 2;
+    const midVal = npvAt(mid);
+    if (Math.abs(midVal) < 1e-7) return mid;
+    if (lowVal * midVal <= 0) {
+      high = mid;
+      highVal = midVal;
+    } else {
+      low = mid;
+      lowVal = midVal;
+    }
+  }
+  return (low + high) / 2;
+}
+
 function setText(id, value) {
   const el = document.getElementById(id);
   if (el) el.textContent = value;
@@ -307,7 +334,16 @@ function switchTab(tabName) {
 function renderKpis() {
   setText("latestDate", data.risk?.latest_scored_date || "-");
   setText("npvValue", vndShort(data.financial?.npv_vnd));
-  setText("irrValue", pct(data.financial?.irr_monthly));
+  // Prefer precomputed IRR, otherwise compute from timeline (if capex present)
+  let irr = data.financial?.irr_monthly;
+  if ((irr === null || irr === undefined) && Array.isArray(data.timeline) && data.timeline.length) {
+    const capex = Number(data.financial?.capex_ai_vnd || 0);
+    const cashflows = [-(capex || 0)];
+    data.timeline.forEach((row) => cashflows.push(Number(row.incremental_cashflow_vnd || 0)));
+    const computed = computeIrr(cashflows);
+    irr = computed;
+  }
+  setText("irrValue", pct(irr));
   setText("optimalN", data.inventory?.optimal_n ?? "-");
   setText("candidateDays", data.risk?.replacement_candidate_days ?? "-");
   setText("capexLabel", `CAPEX ${vndShort(data.financial?.capex_ai_vnd)}`);

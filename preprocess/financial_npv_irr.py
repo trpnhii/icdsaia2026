@@ -26,6 +26,7 @@ DEFAULT_CANDIDATES = PROJECT_ROOT / "input_data" / "risk" / "replacement_candida
 DEFAULT_DAILY_RISK_DIR = PROJECT_ROOT / "input_data" / "risk" / "daily"
 DEFAULT_TRANSFORMED = PROJECT_ROOT / "input_data" / "base" / "transformed.csv"
 DEFAULT_INVENTORY_SUMMARY = PROJECT_ROOT / "input_data" / "inventory" / "spare_inventory_cost_summary.csv"
+DEFAULT_RISK_SCORES = PROJECT_ROOT / "input_data" / "risk" / "risk_scores.csv"
 
 
 @dataclass(frozen=True)
@@ -163,55 +164,63 @@ def resolve_optimal_stock(inventory_summary_path: Path, assumptions: dict[str, A
     return int(safety_stock or 0)
 
 
-def build_monthly_deltas_from_pipeline(
-    assumptions: dict[str, Assumption],
-    candidates_path: Path,
-    daily_risk_dir: Path,
-    transformed_path: Path,
-    inventory_summary_path: Path,
-    horizon_months: int,
-) -> tuple[pd.DataFrame, dict[str, object]]:
-    candidates = read_candidate_events(candidates_path, daily_risk_dir)
-    candidates = load_candidate_capacity(candidates, transformed_path)
+def parse_calendar_month(value: str) -> pd.Period:
+    return pd.Period(value.strip(), freq="M")
 
-    if candidates.empty:
-        return pd.DataFrame(), {"source": "input_data risk pipeline", "coverage_months": 0}
 
-    lead_time_days = get_number(assumptions, "china_lead_time_days") or 0.0
-    installation_time_hours = get_number(assumptions, "installation_time_hours") or 0.0
-    generation_hours_per_day = get_number(assumptions, "generation_hours_per_day") or 0.0
-    price_vnd_per_kwh = get_number_any(
-        assumptions,
-        [
-            "electricity_price_vnd_per_kwh",
-            "quick_blended_price_vnd_per_kwh",
-            "quick_ppa_price_vnd_per_kwh",
-        ],
-    ) or 0.0
-    current_stock = get_number(assumptions, "current_spare_stock_units") or 0.0
-    inverter_unit_cost = get_number(assumptions, "inverter_unit_cost") or 0.0
-    holding_rate_annual = get_number(assumptions, "holding_cost_rate_annual") or 0.0
-    ai_recurring_monthly = get_number(assumptions, "ai_recurring_cost_monthly") or 0.0
-    ai_stock = resolve_optimal_stock(inventory_summary_path, assumptions)
+def resolve_latest_risk_month(risk_scores_path: Path) -> pd.Period | None:
+    if not risk_scores_path.exists():
+        return None
+    risk = pd.read_csv(risk_scores_path, parse_dates=["risk_date"])
+    if risk.empty:
+        return None
+    return risk["risk_date"].max().to_period("M")
 
-    baseline_downtime_days = lead_time_days + installation_time_hours / 24
-    ai_uncovered_downtime_days = baseline_downtime_days
-    ai_covered_downtime_days = installation_time_hours / 24
-    current_holding_monthly = current_stock * inverter_unit_cost * holding_rate_annual / 12
-    ai_holding_monthly = ai_stock * inverter_unit_cost * holding_rate_annual / 12
 
-    candidates["month_period"] = candidates["risk_date"].dt.to_period("M")
-    first_period = candidates["month_period"].min()
-    rows = []
-    for period, month_candidates in candidates.groupby("month_period"):
-        month_index = (period.year - first_period.year) * 12 + period.month - first_period.month + 1
-        if month_index > horizon_months:
-            continue
+def resolve_analysis_month_range(
+    start_month: str | None,
+    end_month: str | None,
+    risk_scores_path: Path,
+) -> tuple[pd.Period | None, pd.Period | None]:
+    resolved_start = parse_calendar_month(start_month) if start_month else None
+    if end_month:
+        resolved_end = parse_calendar_month(end_month)
+    elif resolved_start is not None:
+        resolved_end = resolve_latest_risk_month(risk_scores_path) or resolved_start
+    else:
+        resolved_end = None
+    if resolved_start is not None and resolved_end is not None and resolved_start > resolved_end:
+        raise ValueError(f"start-month {resolved_start} is after end-month {resolved_end}.")
+    return resolved_start, resolved_end
 
-        baseline_loss_kwh = 0.0
-        ai_loss_kwh = 0.0
-        downtime_days_avoided = 0.0
 
+def month_index_from_anchor(period: pd.Period, anchor: pd.Period) -> int:
+    return (period.year - anchor.year) * 12 + period.month - anchor.month + 1
+
+
+def compute_monthly_operational_row(
+    period: pd.Period,
+    month_index: int,
+    month_candidates: pd.DataFrame,
+    *,
+    ai_stock: int,
+    lead_time_days: float,
+    generation_hours_per_day: float,
+    baseline_downtime_days: float,
+    ai_covered_downtime_days: float,
+    ai_uncovered_downtime_days: float,
+    price_vnd_per_kwh: float,
+    current_stock: int,
+    inverter_unit_cost: float,
+    holding_rate_annual: float,
+    ai_recurring_monthly: float,
+    spare_amort_months: int,
+) -> dict[str, object]:
+    baseline_loss_kwh = 0.0
+    ai_loss_kwh = 0.0
+    downtime_days_avoided = 0.0
+
+    if not month_candidates.empty:
         for _, day_candidates in month_candidates.groupby("risk_date"):
             ordered = day_candidates.sort_values(
                 ["lost_capacity_kw", "risk_score"],
@@ -231,31 +240,171 @@ def build_monthly_deltas_from_pipeline(
             )
             downtime_days_avoided += len(covered) * max(0.0, lead_time_days)
 
-        baseline_loss_vnd = baseline_loss_kwh * price_vnd_per_kwh
-        ai_loss_vnd = ai_loss_kwh * price_vnd_per_kwh
-        avoided_loss_vnd = baseline_loss_vnd - ai_loss_vnd
-        holding_saved = current_holding_monthly - ai_holding_monthly
-        net_cashflow = avoided_loss_vnd + holding_saved - ai_recurring_monthly
+    baseline_loss_vnd = baseline_loss_kwh * price_vnd_per_kwh
+    ai_loss_vnd = ai_loss_kwh * price_vnd_per_kwh
+    avoided_loss_vnd = baseline_loss_vnd - ai_loss_vnd
 
+    # compute holding cost change as per-unit difference (positive when AI reduces stock)
+    current_holding_monthly_calc = current_stock * inverter_unit_cost * holding_rate_annual / 12
+    ai_holding_monthly_calc = ai_stock * inverter_unit_cost * holding_rate_annual / 12
+
+    # If AI requires more stock than current, treat incremental units as a
+    # spare purchase. By default this is upfront in month 1, but can be
+    # amortized over `spare_amort_months` months (configurable in assumptions).
+    spare_purchase_cost_vnd = 0.0
+    if ai_stock > current_stock:
+        total_purchase = (ai_stock - current_stock) * inverter_unit_cost
+        if spare_amort_months <= 1:
+            if month_index == 1:
+                spare_purchase_cost_vnd = total_purchase
+        else:
+            # amortize across the first `spare_amort_months` months
+            if 1 <= month_index <= spare_amort_months:
+                spare_purchase_cost_vnd = total_purchase / spare_amort_months
+        # do not apply persistent holding_saved for additional units (purchase covers it)
+        holding_saved = 0.0
+    else:
+        holding_saved = (current_stock - ai_stock) * inverter_unit_cost * holding_rate_annual / 12
+
+    # only charge AI recurring cost when AI actually provides operational savings
+    deployed = (baseline_loss_kwh - ai_loss_kwh) > 0
+    ai_recurring_effective = ai_recurring_monthly if deployed else 0.0
+
+    net_cashflow = avoided_loss_vnd + holding_saved - ai_recurring_effective - spare_purchase_cost_vnd
+
+    return {
+        "Month": month_index,
+        "calendar_month": str(period),
+        "replacement_candidate_events": len(month_candidates),
+        "ai_stock_level_units": ai_stock,
+        "downtime_days_avoided": downtime_days_avoided,
+        "generation_saved_mwh": (baseline_loss_kwh - ai_loss_kwh) / 1000,
+        "baseline_generation_loss_mwh": baseline_loss_kwh / 1000,
+        "ai_generation_loss_mwh": ai_loss_kwh / 1000,
+        "baseline_generation_loss_vnd": baseline_loss_vnd,
+        "ai_generation_loss_vnd": ai_loss_vnd,
+        "current_holding_cost_monthly": current_holding_monthly_calc,
+        "ai_holding_cost_monthly": ai_holding_monthly_calc,
+        "holding_cost_saved_monthly": holding_saved,
+        "ai_recurring_cost_monthly": ai_recurring_effective,
+        "spare_purchase_cost_vnd": spare_purchase_cost_vnd,
+        "net_cost_delta_excl_revenue": net_cashflow,
+    }
+
+
+def build_monthly_deltas_from_pipeline(
+    assumptions: dict[str, Assumption],
+    candidates_path: Path,
+    daily_risk_dir: Path,
+    transformed_path: Path,
+    inventory_summary_path: Path,
+    horizon_months: int,
+    start_month: str | None = None,
+    end_month: str | None = None,
+    risk_scores_path: Path = DEFAULT_RISK_SCORES,
+) -> tuple[pd.DataFrame, dict[str, object]]:
+    lead_time_days = get_number(assumptions, "china_lead_time_days") or 0.0
+    installation_time_hours = get_number(assumptions, "installation_time_hours") or 0.0
+    generation_hours_per_day = get_number(assumptions, "generation_hours_per_day") or 0.0
+    price_vnd_per_kwh = get_number_any(
+        assumptions,
+        [
+            "electricity_price_vnd_per_kwh",
+            "quick_blended_price_vnd_per_kwh",
+            "quick_ppa_price_vnd_per_kwh",
+        ],
+    ) or 0.0
+    current_stock = get_number(assumptions, "current_spare_stock_units") or 0.0
+    inverter_unit_cost = get_number(assumptions, "inverter_unit_cost") or 0.0
+    holding_rate_annual = get_number(assumptions, "holding_cost_rate_annual") or 0.0
+    ai_recurring_monthly = get_number(assumptions, "ai_recurring_cost_monthly") or 0.0
+    ai_stock = resolve_optimal_stock(inventory_summary_path, assumptions)
+    spare_amort_months = int(get_number(assumptions, "spare_purchase_amortization_months") or 1)
+
+    baseline_downtime_days = lead_time_days + installation_time_hours / 24
+    ai_uncovered_downtime_days = baseline_downtime_days
+    ai_covered_downtime_days = installation_time_hours / 24
+    # pass stock and unit cost so the row function computes incremental holding
+    # cost per unit explicitly (positive when AI reduces stock)
+    row_kwargs = {
+        "ai_stock": ai_stock,
+        "lead_time_days": lead_time_days,
+        "generation_hours_per_day": generation_hours_per_day,
+        "baseline_downtime_days": baseline_downtime_days,
+        "ai_covered_downtime_days": ai_covered_downtime_days,
+        "ai_uncovered_downtime_days": ai_uncovered_downtime_days,
+        "price_vnd_per_kwh": price_vnd_per_kwh,
+        "current_stock": current_stock,
+        "inverter_unit_cost": inverter_unit_cost,
+        "holding_rate_annual": holding_rate_annual,
+        "ai_recurring_monthly": ai_recurring_monthly,
+        "spare_amort_months": spare_amort_months,
+    }
+
+    candidates = read_candidate_events(candidates_path, daily_risk_dir)
+    if not candidates.empty:
+        # Load candidate capacity
+        candidates = load_candidate_capacity(candidates, transformed_path)
+        candidates["month_period"] = candidates["risk_date"].dt.to_period("M")
+
+    analysis_start, analysis_end = resolve_analysis_month_range(start_month, end_month, risk_scores_path)
+
+    if analysis_start is not None:
+        if not candidates.empty:
+            candidates = candidates[
+                (candidates["month_period"] >= analysis_start) & (candidates["month_period"] <= analysis_end)
+            ].copy()
+        month_periods = pd.period_range(analysis_start, analysis_end, freq="M")
+        first_period = month_periods[0]
+        rows = []
+        for period in month_periods:
+            month_index = month_index_from_anchor(period, first_period)
+            if month_index > horizon_months:
+                continue
+            if candidates.empty:
+                month_candidates = pd.DataFrame()
+            else:
+                month_candidates = candidates[candidates["month_period"] == period]
+            rows.append(
+                compute_monthly_operational_row(
+                    period,
+                    month_index,
+                    month_candidates,
+                    **row_kwargs,
+                )
+            )
+        deltas = pd.DataFrame(rows).sort_values("Month")
+        metadata = {
+            "source": "input_data/risk/daily + input_data/base/transformed.csv",
+            "coverage_months": len(deltas),
+            "analysis_start_month": str(analysis_start),
+            "analysis_end_month": str(analysis_end),
+            "first_candidate_date": (
+                candidates["risk_date"].min().date().isoformat() if not candidates.empty else None
+            ),
+            "last_candidate_date": (
+                candidates["risk_date"].max().date().isoformat() if not candidates.empty else None
+            ),
+            "ai_stock_level_units": ai_stock,
+        }
+        return deltas, metadata
+
+    if candidates.empty:
+        return pd.DataFrame(), {"source": "input_data risk pipeline", "coverage_months": 0}
+    # Build a continuous month series anchored at the first candidate month
+    first_period = candidates["month_period"].min()
+    month_periods = pd.period_range(first_period, periods=horizon_months, freq="M")
+    rows = []
+    for period in month_periods:
+        month_index = month_index_from_anchor(period, first_period)
+        month_candidates = candidates[candidates["month_period"] == period] if not candidates.empty else pd.DataFrame()
         rows.append(
-            {
-                "Month": month_index,
-                "calendar_month": str(period),
-                "replacement_candidate_events": len(month_candidates),
-                "ai_stock_level_units": ai_stock,
-                "downtime_days_avoided": downtime_days_avoided,
-                "generation_saved_mwh": (baseline_loss_kwh - ai_loss_kwh) / 1000,
-                "baseline_generation_loss_mwh": baseline_loss_kwh / 1000,
-                "ai_generation_loss_mwh": ai_loss_kwh / 1000,
-                "baseline_generation_loss_vnd": baseline_loss_vnd,
-                "ai_generation_loss_vnd": ai_loss_vnd,
-                "current_holding_cost_monthly": current_holding_monthly,
-                "ai_holding_cost_monthly": ai_holding_monthly,
-                "holding_cost_saved_monthly": holding_saved,
-                "ai_recurring_cost_monthly": ai_recurring_monthly,
-                "spare_purchase_cost_vnd": 0.0,
-                "net_cost_delta_excl_revenue": net_cashflow,
-            }
+            compute_monthly_operational_row(
+                period,
+                month_index,
+                month_candidates,
+                **row_kwargs,
+            )
         )
 
     deltas = pd.DataFrame(rows).sort_values("Month")
@@ -384,7 +533,12 @@ def build_financial_outputs(
         ]
     )
     ai_irr = comparison.loc[comparison["scenario"] == "With AI", "irr_monthly"].iloc[0]
-    if ai_irr is not None:
+    # Suppress IRR when there is no explicit AI CAPEX provided (avoid misleading negative IRR)
+    if capex_ai is None:
+        ai_irr = None
+        comparison.loc[comparison["scenario"] == "With AI", "irr_monthly"] = None
+        comparison.loc[comparison["scenario"] == "With AI", "irr_annual_effective"] = None
+    elif ai_irr is not None:
         comparison.loc[comparison["scenario"] == "With AI", "irr_annual_effective"] = (1 + ai_irr) ** 12 - 1
 
     assumption_rows = []
@@ -414,14 +568,22 @@ def build_financial_outputs(
     missing = []
     coverage_months = int(operational_metadata.get("coverage_months") or 0)
     if coverage_months < horizon_months:
+        if operational_metadata.get("analysis_start_month"):
+            window = (
+                f"{operational_metadata.get('analysis_start_month')} to "
+                f"{operational_metadata.get('analysis_end_month')}"
+            )
+        else:
+            window = (
+                f"{operational_metadata.get('first_candidate_date')} to "
+                f"{operational_metadata.get('last_candidate_date')}"
+            )
         missing.append(
             {
                 "missing_input": "24-month operational pipeline data",
                 "reason": (
                     f"Task horizon is {horizon_months} months, but input_data currently provides "
-                    f"{coverage_months} month(s) of replacement-candidate savings "
-                    f"({operational_metadata.get('first_candidate_date')} to "
-                    f"{operational_metadata.get('last_candidate_date')})."
+                    f"{coverage_months} month(s) of operational savings ({window})."
                 ),
             }
         )
@@ -497,7 +659,7 @@ def write_decision_summary(
         "This report uses `Financial_Assumptions.xlsx` for assumptions only. Operational savings are derived from `input_data` pipeline outputs.",
         "",
         "## Current Data-Driven Result",
-        "",
+        
         f"- AI NPV after included CAPEX: {npv:,.0f} VND",
         f"- Included AI CAPEX: {capex:,.0f} VND ({capex_source})",
         f"- Break-even AI CAPEX for NPV >= 0: {max_capex:,.0f} VND",
@@ -532,6 +694,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--daily-risk-dir", type=Path, default=DEFAULT_DAILY_RISK_DIR)
     parser.add_argument("--transformed", type=Path, default=DEFAULT_TRANSFORMED)
     parser.add_argument("--inventory-summary", type=Path, default=DEFAULT_INVENTORY_SUMMARY)
+    parser.add_argument("--risk-scores", type=Path, default=DEFAULT_RISK_SCORES)
+    parser.add_argument(
+        "--start-month",
+        type=str,
+        default=None,
+        help="First calendar month to include (YYYY-MM). Fills all months through --end-month.",
+    )
+    parser.add_argument(
+        "--end-month",
+        type=str,
+        default=None,
+        help="Last calendar month to include (YYYY-MM). Defaults to latest month in --risk-scores.",
+    )
     return parser.parse_args()
 
 
@@ -565,6 +740,9 @@ def main() -> None:
         transformed_path=args.transformed,
         inventory_summary_path=args.inventory_summary,
         horizon_months=args.horizon_months,
+        start_month=args.start_month,
+        end_month=args.end_month,
+        risk_scores_path=args.risk_scores,
     )
 
     comparison, timeline, assumption_notes, missing = build_financial_outputs(

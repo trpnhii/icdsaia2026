@@ -29,6 +29,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from data_exclusions import apply_exclusions, build_excluded_days
+
 warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -204,10 +206,13 @@ def build_transformed(inv: pd.DataFrame,
         df["yield_kwh"] / denom.replace(0, float("nan"))
     ).round(4)
 
-    return df[[
+    base = df[[
         "zone", "date", "device_name", "installed_capacity_kwp",
         "yield_kwh", "irradiation_kwh_m2", "performance_ratio",
     ]].sort_values(["zone", "date", "device_name"]).reset_index(drop=True)
+
+    excluded = build_excluded_days(base)
+    return apply_exclusions(base, excluded)
 
 
 # ── main ──────────────────────────────────────────────────────────────────────
@@ -230,15 +235,26 @@ def main() -> None:
     inv_path = BASE_DIR / "inverter_daily.csv"
     irr_path = BASE_DIR / "irradiation_daily.csv"
     tfm_path = BASE_DIR / "transformed.csv"
+    excluded_path = BASE_DIR / "excluded_days.csv"
+
+    excluded_days = (
+        tfm.loc[tfm["excluded_from_analysis"], ["date", "exclusion_reason"]]
+        .drop_duplicates()
+        .sort_values("date")
+        .reset_index(drop=True)
+    )
 
     inv.to_csv(inv_path, index=False, encoding="utf-8-sig")
     irr.to_csv(irr_path, index=False, encoding="utf-8-sig")
     tfm.to_csv(tfm_path, index=False, encoding="utf-8-sig")
+    excluded_days.to_csv(excluded_path, index=False, encoding="utf-8-sig")
 
     print(f"\n── Done ──")
     print(f"  {inv_path}")
     print(f"  {irr_path}")
     print(f"  {tfm_path}")
+    print(f"  {excluded_path}")
+    print(f"  Excluded analysis days: {len(excluded_days):,}")
     print(f"\n  Rows             : {len(tfm):,}")
     print(f"  Devices          : {tfm['device_name'].nunique()}")
     print(f"  Date range       : {tfm['date'].min().date()} – {tfm['date'].max().date()}")

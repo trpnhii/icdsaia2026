@@ -19,14 +19,18 @@ same-day fleet peers and deteriorating short-term trend.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
+from data_exclusions import apply_exclusions, build_excluded_days
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 INPUT_PATH = PROJECT_ROOT / "input_data" / "base" / "transformed.csv"
+THRESHOLDS_PATH = PROJECT_ROOT / "config" / "risk_thresholds.json"
 OUTPUT_DIR = PROJECT_ROOT / "input_data" / "risk"
 RISK_PATH = OUTPUT_DIR / "risk_scores.csv"
 CANDIDATES_PATH = OUTPUT_DIR / "replacement_candidates.csv"
@@ -34,6 +38,12 @@ WATCHLIST_PATH = OUTPUT_DIR / "risk_watchlist.csv"
 DAILY_OUTPUT_DIR = OUTPUT_DIR / "daily"
 
 MIN_IRRADIATION = 0.5
+
+
+def load_risk_thresholds(config_path: Path = THRESHOLDS_PATH) -> dict:
+    with config_path.open(encoding="utf-8") as handle:
+        config = json.load(handle)
+    return config["replacement_candidate"]
 
 
 def _slope_per_day(group: pd.DataFrame, value_col: str) -> float:
@@ -74,11 +84,15 @@ def _prepare_valid_rows(input_path: Path) -> pd.DataFrame:
         & ~df["device_name"].str.startswith("Inverter(COM", na=False)
     ].copy()
 
+    if "excluded_from_analysis" not in df.columns:
+        df = apply_exclusions(df, build_excluded_days(df))
+
     # Low/zero irradiation days make PR unstable or undefined for this purpose.
     valid = df[
         df["performance_ratio"].notna()
         & df["irradiation_kwh_m2"].notna()
         & (df["irradiation_kwh_m2"] >= MIN_IRRADIATION)
+        & ~df["excluded_from_analysis"].fillna(False)
     ].copy()
 
     valid["date_median_pr"] = valid.groupby("date")["performance_ratio"].transform("median")
@@ -91,7 +105,13 @@ def _prepare_valid_rows(input_path: Path) -> pd.DataFrame:
     return valid.sort_values(["date", "zone", "device_name"]).reset_index(drop=True)
 
 
-def _score_one_day(history: pd.DataFrame, score_date: pd.Timestamp) -> pd.DataFrame:
+def _score_one_day(
+    history: pd.DataFrame,
+    score_date: pd.Timestamp,
+    thresholds: dict | None = None,
+) -> pd.DataFrame:
+    if thresholds is None:
+        thresholds = load_risk_thresholds()
     current = history[history["date"] == score_date].copy()
     if current.empty:
         return pd.DataFrame()
@@ -168,40 +188,58 @@ def _score_one_day(history: pd.DataFrame, score_date: pd.Timestamp) -> pd.DataFr
         risk["risk_score"].rank(pct=True, method="average") * 100
     ).round(2)
 
+    acute_cfg = thresholds.get("acute_14d", {})
     replace_14 = (
-        (risk["risk_score"] >= 80)
+        (risk["risk_score"] >= thresholds["risk_score_within_14_days"])
         & (
-            (risk["severe_low_rate_14d"] >= 0.50)
-            | (risk["mean_deficit_14d"] >= 0.55)
-            | (risk["projected_relative_pr_14d"] < 0.45)
+            (risk["severe_low_rate_14d"] >= thresholds["severe_low_rate_14d"])
+            | (risk["mean_deficit_14d"] >= thresholds["mean_deficit_14d"])
+            | (risk["projected_relative_pr_14d"] < thresholds["projected_relative_pr_14d"])
         )
     )
     replace_30 = (
         ~replace_14
-        & (risk["risk_score"] >= 65)
+        & (risk["risk_score"] >= thresholds["risk_score_within_30_days"])
         & (
-            (risk["severe_low_rate_30d"] >= 0.35)
-            | (risk["mean_deficit_30d"] >= 0.40)
-            | (risk["projected_relative_pr_30d"] < 0.60)
+            (risk["severe_low_rate_30d"] >= thresholds["severe_low_rate_30d"])
+            | (risk["mean_deficit_30d"] >= thresholds["mean_deficit_30d"])
+            | (risk["projected_relative_pr_30d"] < thresholds["projected_relative_pr_30d"])
         )
     )
+    replace_acute_14 = pd.Series(False, index=risk.index)
+    if acute_cfg.get("enabled", False):
+        replace_acute_14 = (
+            ~replace_14
+            & ~replace_30
+            & (risk["severe_low_rate_14d"] >= acute_cfg["severe_low_rate_14d"])
+            & (risk["fleet_relative_risk_score"] >= acute_cfg["fleet_relative_risk_score"])
+            & (risk["valid_days_14d"] >= acute_cfg["min_valid_days_14d"])
+        )
 
+    monitor_score = thresholds.get("monitor_risk_score", 40)
     risk["replacement_window"] = np.select(
-        [replace_14, replace_30, risk["risk_score"] >= 45],
-        ["within_14_days", "within_30_days", "monitor"],
+        [replace_14, replace_30, replace_acute_14, risk["risk_score"] >= monitor_score],
+        ["within_14_days", "within_30_days", "acute_14_days", "monitor"],
         default="no_replacement_signal",
     )
-    risk["replacement_candidate"] = risk["replacement_window"].isin(["within_14_days", "within_30_days"])
+    risk["replacement_candidate"] = risk["replacement_window"].isin(
+        ["within_14_days", "within_30_days", "acute_14_days"]
+    )
     return risk
 
 
-def build_risk_scores(input_path: Path = INPUT_PATH) -> tuple[pd.DataFrame, pd.DataFrame]:
+def build_risk_scores(
+    input_path: Path = INPUT_PATH,
+    thresholds: dict | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    if thresholds is None:
+        thresholds = load_risk_thresholds()
     valid = _prepare_valid_rows(input_path)
 
     frames: list[pd.DataFrame] = []
     for score_date in valid["date"].drop_duplicates():
         history = valid[valid["date"] <= score_date].copy()
-        frames.append(_score_one_day(history, score_date))
+        frames.append(_score_one_day(history, score_date, thresholds))
 
     risk = pd.concat(frames, ignore_index=True)
     ordered_cols = [
