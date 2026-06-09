@@ -292,7 +292,24 @@ function drawMultiLineChart(svgId, series, options = {}) {
   const allValues = series.flatMap((item) => item.values.filter((value) => value !== null));
   const x = makeScaler([...Array(pointCount).keys()], pad.left, width - pad.right);
   const y = makeScaler(allValues, height - pad.bottom, pad.top);
-  const colors = ["#2563eb", "#0f766e", "#b45309", "#b42318", "#756bb1"];
+  const colors = options.colors || [
+    "#2563eb",
+    "#0f766e",
+    "#b45309",
+    "#b42318",
+    "#756bb1",
+    "#6366f1",
+    "#0891b2",
+    "#ca8a04",
+    "#db2777",
+    "#4d7c0f",
+    "#7c3aed",
+    "#0e7490",
+    "#c2410c",
+    "#be123c",
+    "#475569",
+  ];
+  const strokeWidth = series.length > 10 ? 1.2 : series.length > 5 ? 1.5 : compact ? 1.8 : 3;
 
   if (compact) {
     for (let i = 0; i < 3; i += 1) {
@@ -323,15 +340,16 @@ function drawMultiLineChart(svgId, series, options = {}) {
     );
   }
 
-  series.slice(0, compact ? 3 : 4).forEach((item, seriesIndex) => {
+  series.forEach((item, seriesIndex) => {
     const points = item.values
       .map((value, index) => (value === null ? null : `${x(index)},${y(value)}`))
       .filter(Boolean)
       .join(" ");
     if (!points) return;
+    const color = colors[seriesIndex % colors.length];
     svg.insertAdjacentHTML(
       "beforeend",
-      `<polyline class="line ${compact ? "compact-line" : ""}" points="${points}" stroke="${colors[seriesIndex % colors.length]}" stroke-width="${compact ? 1.8 : 3}"></polyline>`
+      `<polyline class="series-line ${compact ? "compact-line" : ""}" points="${points}" style="stroke:${color};stroke-width:${strokeWidth}"></polyline>`
     );
   });
   if (options.xLabels?.length) {
@@ -605,6 +623,73 @@ function renderConclusions() {
   list.innerHTML = items.map((item) => `<li>${item}</li>`).join("");
 }
 
+const PR_CHART_COLORS = [
+  "#2563eb",
+  "#0f766e",
+  "#b45309",
+  "#b42318",
+  "#756bb1",
+  "#6366f1",
+  "#0891b2",
+  "#ca8a04",
+  "#db2777",
+  "#4d7c0f",
+  "#7c3aed",
+  "#0e7490",
+  "#c2410c",
+  "#be123c",
+  "#475569",
+];
+
+function prDeviceSeriesLimit() {
+  const select = document.getElementById("prDeviceChartLimit");
+  return select?.value || "3";
+}
+
+function slicePrDeviceRows(rows, limitValue) {
+  if (limitValue === "all") return rows;
+  const count = Number(limitValue);
+  if (!Number.isFinite(count) || count <= 0) return rows.slice(0, 3);
+  return rows.slice(0, count);
+}
+
+function renderPrDeviceChart() {
+  const matrix = taskFlow.prMatrix || { dates: [], rows: [], total_candidates: 0 };
+  const limitValue = prDeviceSeriesLimit();
+  const selectedRows = slicePrDeviceRows(matrix.rows || [], limitValue);
+  const prSeries = selectedRows.map((row) => ({
+    label: row.label,
+    values: row.values,
+  }));
+  const totalCandidates = matrix.total_candidates || matrix.rows?.length || 0;
+  const showing = prSeries.length;
+  const limitLabel = limitValue === "all" ? "all" : `top ${limitValue}`;
+  setText(
+    "prDeviceChartNote",
+    `Persistent replacement candidates (${limitLabel}): ${showing} of ${totalCandidates} devices`
+  );
+
+  const legend = document.getElementById("prDeviceChartLegend");
+  if (legend) {
+    legend.innerHTML = prSeries
+      .map(
+        (item, index) => `
+          <span class="chart-legend-item">
+            <span class="chart-legend-swatch" style="background:${PR_CHART_COLORS[index % PR_CHART_COLORS.length]}"></span>
+            ${item.label}
+          </span>
+        `
+      )
+      .join("");
+  }
+
+  drawMultiLineChart("prDeviceChart", prSeries, {
+    compact: true,
+    xLabels: matrix.dates || [],
+    colors: PR_CHART_COLORS,
+  });
+}
+
 function renderTaskFlow() {
   renderPrMatrix();
   renderEquipmentComparison();
@@ -612,17 +697,9 @@ function renderTaskFlow() {
   renderScenarioComparison();
   renderInventoryDecision();
   renderConclusions();
+  renderPrDeviceChart();
 
-  const prDates = taskFlow.prMatrix?.dates || [];
-  const prSeries = (taskFlow.prMatrix?.rows || []).slice(0, 4).map((row) => ({
-    label: row.label,
-    values: row.values,
-  }));
   const alarmRows = (taskFlow.dailyAlarms || []).slice(-14);
-  drawMultiLineChart("prDeviceChart", prSeries, {
-    compact: true,
-    xLabels: prDates,
-  });
   drawSparkBars("alarmChart", alarmRows, "alarm_count", {
     firstLabel: alarmRows[0]?.date?.slice(5) || "",
     lastLabel: alarmRows[alarmRows.length - 1]?.date?.slice(5) || "",
@@ -659,4 +736,5 @@ document.querySelectorAll("[data-tab]").forEach((link) => {
 });
 
 document.getElementById("refreshButton")?.addEventListener("click", render);
+document.getElementById("prDeviceChartLimit")?.addEventListener("change", renderPrDeviceChart);
 render();

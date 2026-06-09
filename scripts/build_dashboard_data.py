@@ -193,7 +193,7 @@ def load_inventory_config() -> dict[str, object]:
 
 
 def pr_matrix(
-    limit_devices: int = 9,
+    limit_devices: int | None = None,
     limit_days: int = 10,
     as_of: pd.Timestamp | None = None,
 ) -> dict[str, object]:
@@ -201,10 +201,13 @@ def pr_matrix(
     persistence = read_csv(PROJECT_ROOT / "input_data" / "evaluation" / "no_label_candidate_persistence.csv")
     risk = read_csv(PROJECT_ROOT / "input_data" / "risk" / "risk_scores.csv")
     if transformed.empty or persistence.empty:
-        return {"dates": [], "rows": []}
+        return {"dates": [], "rows": [], "total_candidates": 0}
 
     transformed["date"] = pd.to_datetime(transformed["date"])
-    top_devices = persistence.head(limit_devices)[["zone", "device_name"]].copy()
+    ranked = persistence[persistence["candidate_days"] > 0].copy()
+    if limit_devices is not None:
+        ranked = ranked.head(limit_devices)
+    top_devices = ranked[["zone", "device_name"]].copy()
     if not risk.empty:
         candidate_dates = pd.to_datetime(risk["risk_date"]).dropna()
     else:
@@ -237,7 +240,11 @@ def pr_matrix(
             }
         )
 
-    return {"dates": date_labels, "rows": rows}
+    return {
+        "dates": date_labels,
+        "rows": rows,
+        "total_candidates": int(len(ranked)),
+    }
 
 
 def daily_pr_alarms(limit_days: int = 30, as_of: pd.Timestamp | None = None) -> list[dict[str, object]]:

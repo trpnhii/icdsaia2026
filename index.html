@@ -156,7 +156,20 @@
             </div>
             <div class="taskflow-charts-row">
               <div class="chart-mini">
-                <p class="chart-caption">Device PR (%)</p>
+                <div class="chart-mini-header">
+                  <p class="chart-caption">Device PR (%)</p>
+                  <label class="chart-control">
+                    <span>Show</span>
+                    <select id="prDeviceChartLimit" aria-label="Number of devices to show on Device PR chart">
+                      <option value="3" selected>Top 3</option>
+                      <option value="5">Top 5</option>
+                      <option value="10">Top 10</option>
+                      <option value="all">All</option>
+                    </select>
+                  </label>
+                </div>
+                <p class="chart-note" id="prDeviceChartNote"></p>
+                <div id="prDeviceChartLegend" class="chart-legend" aria-label="Device PR chart legend"></div>
                 <svg id="prDeviceChart" viewBox="0 0 400 150" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Device PR chart"></svg>
               </div>
               <div class="chart-mini">

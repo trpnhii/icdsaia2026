@@ -1231,8 +1231,111 @@ window.DASHBOARD_DATA = {
             64.5,
             64.8
           ]
+        },
+        {
+          "label": "HF18 INV6",
+          "device_name": "HF18 Inverter 6",
+          "zone": 2,
+          "values": [
+            72.7,
+            70.7,
+            68.1,
+            71.8,
+            66.6,
+            67.2,
+            68.6,
+            68.4,
+            67.2,
+            66.6
+          ]
+        },
+        {
+          "label": "HF18 INV8",
+          "device_name": "HF18 Inverter 8",
+          "zone": 2,
+          "values": [
+            65.4,
+            63.5,
+            61.8,
+            64.5,
+            61.5,
+            61.2,
+            61.6,
+            61.6,
+            61.1,
+            60.9
+          ]
+        },
+        {
+          "label": "HF17 INV5",
+          "device_name": "HF17 Inverter 5",
+          "zone": 2,
+          "values": [
+            68.6,
+            66.8,
+            64.6,
+            67.1,
+            63.8,
+            64.0,
+            64.8,
+            65.2,
+            63.9,
+            64.5
+          ]
+        },
+        {
+          "label": "HF20 INV2",
+          "device_name": "HF20 Inverter 2",
+          "zone": 2,
+          "values": [
+            63.6,
+            64.5,
+            59.8,
+            63.8,
+            70.4,
+            65.8,
+            69.4,
+            69.5,
+            67.7,
+            67.2
+          ]
+        },
+        {
+          "label": "HF17 INV6",
+          "device_name": "HF17 Inverter 6",
+          "zone": 2,
+          "values": [
+            67.8,
+            66.3,
+            64.0,
+            65.9,
+            63.6,
+            62.7,
+            64.1,
+            64.0,
+            63.0,
+            62.6
+          ]
+        },
+        {
+          "label": "HF20 INV5",
+          "device_name": "HF20 Inverter 5",
+          "zone": 2,
+          "values": [
+            64.2,
+            64.6,
+            60.2,
+            61.0,
+            68.9,
+            67.7,
+            69.7,
+            69.8,
+            68.2,
+            67.7
+          ]
         }
-      ]
+      ],
+      "total_candidates": 15
     },
     "dailyAlarms": [
       {
