@@ -12,15 +12,23 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_PATH = PROJECT_ROOT / "data.js"
 CONFIG_PATH = PROJECT_ROOT / "config" / "spare_inventory.json"
+BASELINE_CONFIG_PATH = PROJECT_ROOT / "config" / "financial_baseline.json"
 
 # Anchor (inclusive) end date for the dashboard's recent-window views (PR matrix,
 # daily alarms, candidate week). The latest scored days (Apr 29-30, 2026) contain
 # implausible irradiation spikes that deflate PR fleet-wide, so we end the window
 # on a clean date by default. Set to None to always use the latest available date.
 DEFAULT_AS_OF = "2026-04-28"
-# User-provided reference values for "Without AI" financial baseline.
-WITHOUT_AI_IRR_QUARTERLY = 0.1473  # 14.73% per quarter
-WITHOUT_AI_NPV_USD = 8517.36
+
+
+def load_without_ai_baseline() -> dict[str, object]:
+    if not BASELINE_CONFIG_PATH.exists():
+        return {"irr_quarterly": 0.1473, "npv_usd": 8517.36, "irr_period": "quarter"}
+    with BASELINE_CONFIG_PATH.open(encoding="utf-8") as handle:
+        payload = json.load(handle)
+    return payload.get("without_ai", payload)
+
+
 MONTH_LABELS = [
     "Jan",
     "Feb",
@@ -141,6 +149,10 @@ def inventory_summary() -> dict[str, object]:
     }
 
 
+def monthly_to_quarterly_irr(irr_monthly: float) -> float:
+    return (1 + irr_monthly) ** 3 - 1
+
+
 def financial_summary() -> dict[str, object]:
     df = read_csv(PROJECT_ROOT / "output_data" / "financial" / "npv_irr_comparison.csv")
     if df.empty:
@@ -148,35 +160,23 @@ def financial_summary() -> dict[str, object]:
     ai = df[df["scenario"] == "With AI"]
     if ai.empty:
         return {}
-    missing = read_csv(PROJECT_ROOT / "output_data" / "financial" / "missing_financial_inputs.csv")
     monthly = read_csv(PROJECT_ROOT / "output_data" / "financial" / "monthly_operational_savings.csv")
     row = ai.iloc[0]
     irr_raw_monthly: float | None = float(row["irr_monthly"]) if pd.notna(row["irr_monthly"]) else None
-    irr_adjusted_monthly: float | None = irr_raw_monthly
     irr_reliability_note = ""
 
     coverage_months = int(len(monthly)) if not monthly.empty else 0
     horizon_months = 24
-    coverage_ratio = min(1.0, coverage_months / horizon_months) if horizon_months > 0 else 1.0
-
-    if coverage_months > 0 and pd.notna(row.get("capex_ai_included_vnd")):
-        capex = float(row["capex_ai_included_vnd"])
-        monthly_net = monthly["net_cost_delta_excl_revenue"].astype(float).tolist()
-        if coverage_ratio < 1.0:
-            adjusted_cashflows = [-capex] + [value * coverage_ratio for value in monthly_net]
-            solved = _solve_irr(adjusted_cashflows)
-            if solved is not None:
-                irr_adjusted_monthly = solved
-            irr_reliability_note = (
-                f"IRR adjusted by data coverage ({coverage_months}/{horizon_months} months) "
-                "to reduce short-window overstatement."
-            )
-    if irr_adjusted_monthly is None and irr_raw_monthly is not None:
-        irr_adjusted_monthly = irr_raw_monthly
+    if coverage_months > 0 and coverage_months < horizon_months:
+        irr_reliability_note = (
+            f"IRR/NPV based on {coverage_months} month(s) of pipeline data "
+            f"(analysis horizon {horizon_months} months)."
+        )
 
     return {
         "npv_vnd": float(row["npv_vnd"]),
-        "irr_monthly": irr_adjusted_monthly,
+        "irr_monthly": irr_raw_monthly,
+        "irr_quarterly": monthly_to_quarterly_irr(irr_raw_monthly) if irr_raw_monthly is not None else None,
         "irr_raw_monthly": irr_raw_monthly,
         "irr_coverage_months": coverage_months,
         "irr_reliability_note": irr_reliability_note,
@@ -262,20 +262,34 @@ def daily_pr_alarms(limit_days: int = 30, as_of: pd.Timestamp | None = None) -> 
 
 def monthly_abnormal_counts() -> list[dict[str, object]]:
     candidates = read_csv(PROJECT_ROOT / "input_data" / "risk" / "replacement_candidates.csv")
-    counts = {month: 0 for month in range(1, 13)}
-    if not candidates.empty:
-        candidates["risk_date"] = pd.to_datetime(candidates["risk_date"])
-        grouped = (
-            candidates.groupby(candidates["risk_date"].dt.month)
-            .apply(lambda df: df[["zone", "device_name"]].drop_duplicates().shape[0])
-        )
-        for month, quantity in grouped.items():
-            counts[int(month)] = int(quantity)
+    transformed = read_csv(PROJECT_ROOT / "input_data" / "base" / "transformed.csv")
+    if candidates.empty:
+        return []
 
-    return [
-        {"month": month, "label": MONTH_LABELS[month - 1], "quantity": counts[month]}
-        for month in range(1, 13)
-    ]
+    candidates["risk_date"] = pd.to_datetime(candidates["risk_date"])
+    grouped = (
+        candidates.groupby(candidates["risk_date"].dt.to_period("M"))
+        .apply(lambda df: int(df[["zone", "device_name"]].drop_duplicates().shape[0]))
+    )
+    first_period = grouped.index.min()
+    if not transformed.empty:
+        transformed["date"] = pd.to_datetime(transformed["date"])
+        last_period = max(grouped.index.max(), transformed["date"].dt.to_period("M").max())
+    else:
+        last_period = grouped.index.max()
+
+    rows: list[dict[str, object]] = []
+    for period in pd.period_range(first_period, last_period, freq="M"):
+        rows.append(
+            {
+                "month": int(period.month),
+                "year": int(period.year),
+                "calendar_month": str(period),
+                "label": f"{MONTH_LABELS[int(period.month) - 1]} {int(period.year)}",
+                "quantity": int(grouped.get(period, 0)),
+            }
+        )
+    return rows
 
 
 def equipment_operational_rows(limit: int = 9, as_of: pd.Timestamp | None = None) -> list[dict[str, object]]:
@@ -387,21 +401,16 @@ def scenario_comparison() -> list[dict[str, object]]:
     df = read_csv(PROJECT_ROOT / "output_data" / "financial" / "npv_irr_comparison.csv")
     if df.empty:
         return []
-    missing = read_csv(PROJECT_ROOT / "output_data" / "financial" / "missing_financial_inputs.csv")
     monthly = read_csv(PROJECT_ROOT / "output_data" / "financial" / "monthly_operational_savings.csv")
     config = load_inventory_config()
+    baseline = load_without_ai_baseline()
     fx = float(config.get("vnd_per_usd", 25550))
-    without_ai_irr_monthly = (1 + WITHOUT_AI_IRR_QUARTERLY) ** (1 / 3) - 1
-    without_ai_npv_vnd = WITHOUT_AI_NPV_USD * fx
-    adjust_irr = False
+    without_ai_irr_quarterly = float(baseline.get("irr_quarterly", 0.1473))
+    without_ai_npv_usd = float(baseline.get("npv_usd", 8517.36))
+    without_ai_irr_monthly = (1 + without_ai_irr_quarterly) ** (1 / 3) - 1
+    without_ai_npv_vnd = without_ai_npv_usd * fx
     coverage_months = int(len(monthly)) if not monthly.empty else 0
     horizon_months = 24
-    coverage_ratio = min(1.0, coverage_months / horizon_months) if horizon_months > 0 else 1.0
-    if not missing.empty and "missing_input" in missing.columns:
-        missing_inputs = set(missing["missing_input"].dropna().astype(str).tolist())
-        adjust_irr = bool(
-            missing_inputs.intersection({"24-month operational pipeline data", "official_capex_ai"})
-        )
     rows = []
     for _, row in df.iterrows():
         irr_monthly = row.get("irr_monthly")
@@ -409,29 +418,48 @@ def scenario_comparison() -> list[dict[str, object]]:
         npv_vnd = float(row["npv_vnd"]) if pd.notna(row["npv_vnd"]) else None
         note = ""
         if row["scenario"] == "Without AI":
+            if pd.notna(row.get("irr_quarterly")):
+                without_ai_irr_quarterly = float(row["irr_quarterly"])
+                without_ai_irr_monthly = float(row["irr_monthly"]) if pd.notna(row.get("irr_monthly")) else (
+                    (1 + without_ai_irr_quarterly) ** (1 / 3) - 1
+                )
+            if pd.notna(row.get("npv_usd")):
+                without_ai_npv_usd = float(row["npv_usd"])
+            if pd.notna(row.get("npv_vnd")):
+                without_ai_npv_vnd = float(row["npv_vnd"])
             irr_monthly = without_ai_irr_monthly
             irr_annual = (1 + without_ai_irr_monthly) ** 12 - 1
             npv_vnd = without_ai_npv_vnd
             note = (
-                f"Reference provided by team: IRR {WITHOUT_AI_IRR_QUARTERLY * 100:.2f}%/quarter, "
-                f"NPV {WITHOUT_AI_NPV_USD:,.2f} USD, FX {fx:,.0f}."
+                f"Reference provided by team: IRR {without_ai_irr_quarterly * 100:.2f}%/quarter, "
+                f"NPV {without_ai_npv_usd:,.2f} USD, FX {fx:,.0f}."
             )
-        if row["scenario"] == "With AI" and adjust_irr and coverage_months > 0 and pd.notna(
-            row.get("capex_ai_included_vnd")
-        ):
-            capex = float(row["capex_ai_included_vnd"])
-            monthly_net = monthly["net_cost_delta_excl_revenue"].astype(float).tolist()
-            adjusted_cashflows = [-capex] + [value * coverage_ratio for value in monthly_net]
-            solved = _solve_irr(adjusted_cashflows)
-            if solved is not None:
-                irr_monthly = solved
-                irr_annual = (1 + solved) ** 12 - 1
+            irr_period = str(row.get("irr_period") or baseline.get("irr_period") or "quarter")
+        else:
+            irr_period = "month"
+            if coverage_months > 0 and coverage_months < horizon_months:
+                note = (
+                    f"Based on {coverage_months} month(s) of pipeline data "
+                    f"(horizon {horizon_months} months)."
+                )
+            ai_irr_quarterly = (
+                monthly_to_quarterly_irr(float(irr_monthly))
+                if pd.notna(irr_monthly)
+                else None
+            )
         rows.append(
             {
                 "scenario": row["scenario"],
                 "npv_vnd": npv_vnd,
+                "npv_usd": without_ai_npv_usd if row["scenario"] == "Without AI" else None,
                 "irr_monthly": float(irr_monthly) if pd.notna(irr_monthly) else None,
+                "irr_quarterly": (
+                    float(without_ai_irr_quarterly)
+                    if row["scenario"] == "Without AI"
+                    else (float(ai_irr_quarterly) if row["scenario"] == "With AI" and ai_irr_quarterly is not None else None)
+                ),
                 "irr_annual": float(irr_annual) if pd.notna(irr_annual) else None,
+                "irr_period": irr_period if row["scenario"] == "Without AI" else "month",
                 "note": note,
             }
         )
@@ -445,9 +473,16 @@ def scenario_variance(rows: list[dict[str, object]]) -> dict[str, object]:
     ai = next((row for row in rows if row["scenario"] == "With AI"), rows[-1])
     npv_delta = (ai.get("npv_vnd") or 0) - (baseline.get("npv_vnd") or 0)
     irr_delta = None
+    irr_quarterly_delta = None
     if ai.get("irr_monthly") is not None and baseline.get("irr_monthly") is not None:
         irr_delta = ai["irr_monthly"] - baseline["irr_monthly"]
-    return {"npv_vnd": npv_delta, "irr_monthly": irr_delta}
+    if ai.get("irr_quarterly") is not None and baseline.get("irr_quarterly") is not None:
+        irr_quarterly_delta = ai["irr_quarterly"] - baseline["irr_quarterly"]
+    return {
+        "npv_vnd": npv_delta,
+        "irr_monthly": irr_delta,
+        "irr_quarterly": irr_quarterly_delta,
+    }
 
 
 def inventory_decision() -> dict[str, object]:
@@ -459,7 +494,8 @@ def inventory_decision() -> dict[str, object]:
         unique_devices = candidates[["zone", "device_name"]].drop_duplicates().shape[0]
 
     optimal_n = int(inventory.get("optimal_n", 0))
-    current_stock = int(config.get("reference_prestock_units", 10))
+    # Dashboard scenario: no spare inverters on hand at decision time.
+    current_stock = 0
     order_qty = max(optimal_n - current_stock, 0)
     return {
         "demand_devices": unique_devices,
@@ -487,13 +523,27 @@ def task_flow_summary() -> dict[str, object]:
     }
 
 
+def purchasing_schedule_meta(rows: list[dict[str, object]]) -> dict[str, object]:
+    if not rows:
+        return {"year_range": "", "start_month": "", "end_month": ""}
+    years = sorted({int(row["year"]) for row in rows})
+    year_range = str(years[0]) if len(years) == 1 else f"{years[0]}–{years[-1]}"
+    return {
+        "year_range": year_range,
+        "start_month": str(rows[0]["calendar_month"]),
+        "end_month": str(rows[-1]["calendar_month"]),
+    }
+
+
 def task_flow_payload(as_of: pd.Timestamp | None = None) -> dict[str, object]:
     equipment_rows = equipment_operational_rows(as_of=as_of)
     comparison = scenario_comparison()
+    monthly_abnormal = monthly_abnormal_counts()
     return {
         "prMatrix": pr_matrix(as_of=as_of),
         "dailyAlarms": daily_pr_alarms(as_of=as_of),
-        "monthlyAbnormal": monthly_abnormal_counts(),
+        "monthlyAbnormal": monthly_abnormal,
+        "purchasingSchedule": purchasing_schedule_meta(monthly_abnormal),
         "equipmentRows": equipment_rows,
         "operationalTotals": operational_totals(equipment_rows),
         "scenarioComparison": comparison,

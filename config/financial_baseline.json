@@ -1,0 +1,8 @@
+{
+  "without_ai": {
+    "irr_quarterly": 0.1473,
+    "npv_usd": 8517.36,
+    "irr_period": "quarter",
+    "source": "P90 FM baseline without AI (team reference)"
+  }
+}

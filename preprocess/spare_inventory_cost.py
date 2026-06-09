@@ -40,6 +40,7 @@ COST_CURVE_PATH = PROJECT_ROOT / "output_data" / "figures" / "inventory" / "spar
 
 def load_candidate_capacity() -> pd.DataFrame:
     candidates = pd.read_csv(CANDIDATES_PATH, parse_dates=["risk_date"])
+    candidates["zone"] = pd.to_numeric(candidates["zone"], errors="coerce")
     capacity = (
         pd.read_csv(TRANSFORMED_PATH)
         [["zone", "device_name", "installed_capacity_kwp"]]
@@ -50,7 +51,10 @@ def load_candidate_capacity() -> pd.DataFrame:
     df = candidates.merge(capacity, on=["zone", "device_name"], how="left")
     missing = df["lost_capacity_kw"].isna().sum()
     if missing:
-        raise ValueError(f"Missing capacity for {missing} candidate rows.")
+        missing_devices = df[df["lost_capacity_kw"].isna()][["zone", "device_name"]].drop_duplicates()
+        print(f"Warning: Missing capacity for {missing} candidate rows.")
+        print(missing_devices.to_string(index=False))
+        df = df[~df["lost_capacity_kw"].isna()].copy()
     return df.sort_values(["risk_date", "risk_score"], ascending=[True, False])
 
 

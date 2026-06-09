@@ -9,6 +9,7 @@ items when the workbook is not yet complete enough for final NPV/IRR.
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import re
 from dataclasses import dataclass
@@ -21,12 +22,42 @@ from openpyxl import load_workbook
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_WORKBOOK = PROJECT_ROOT / "input_data" / "Financial_Assumptions.xlsx"
+DEFAULT_BASELINE_CONFIG = PROJECT_ROOT / "config" / "financial_baseline.json"
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "output_data" / "financial"
 DEFAULT_CANDIDATES = PROJECT_ROOT / "input_data" / "risk" / "replacement_candidates.csv"
 DEFAULT_DAILY_RISK_DIR = PROJECT_ROOT / "input_data" / "risk" / "daily"
 DEFAULT_TRANSFORMED = PROJECT_ROOT / "input_data" / "base" / "transformed.csv"
 DEFAULT_INVENTORY_SUMMARY = PROJECT_ROOT / "input_data" / "inventory" / "spare_inventory_cost_summary.csv"
 DEFAULT_RISK_SCORES = PROJECT_ROOT / "input_data" / "risk" / "risk_scores.csv"
+
+
+def load_without_ai_baseline(config_path: Path = DEFAULT_BASELINE_CONFIG) -> dict[str, object]:
+    if not config_path.exists():
+        return {"irr_quarterly": 0.1473, "npv_usd": 8517.36, "irr_period": "quarter", "source": "default"}
+    with config_path.open(encoding="utf-8") as handle:
+        payload = json.load(handle)
+    return payload.get("without_ai", payload)
+
+
+def without_ai_reference_metrics(
+    assumptions: dict[str, Assumption],
+    baseline: dict[str, object] | None = None,
+) -> dict[str, float | str | None]:
+    baseline = baseline or load_without_ai_baseline()
+    irr_quarterly = float(baseline.get("irr_quarterly", 0.1473))
+    npv_usd = float(baseline.get("npv_usd", 8517.36))
+    fx = get_number_any(assumptions, ["fx_vnd_usd", "fx_usd_vnd"]) or 25550.0
+    irr_monthly = (1 + irr_quarterly) ** (1 / 3) - 1
+    return {
+        "irr_quarterly": irr_quarterly,
+        "irr_monthly": irr_monthly,
+        "irr_annual_effective": (1 + irr_monthly) ** 12 - 1,
+        "npv_usd": npv_usd,
+        "npv_vnd": npv_usd * fx,
+        "fx_vnd_usd": fx,
+        "baseline_source": str(baseline.get("source", "team reference")),
+        "irr_period": str(baseline.get("irr_period", "quarter")),
+    }
 
 
 @dataclass(frozen=True)
@@ -151,7 +182,15 @@ def load_candidate_capacity(candidates: pd.DataFrame, transformed_path: Path) ->
     df = candidates.merge(capacity, on=["zone", "device_name"], how="left")
     missing = df["lost_capacity_kw"].isna().sum()
     if missing:
-        raise ValueError(f"Missing installed capacity for {missing} replacement candidate rows.")
+        missing_devices = df[df["lost_capacity_kw"].isna()][["zone", "device_name"]].drop_duplicates()
+        print(
+            f"Warning: Missing installed capacity for {missing} replacement candidate rows."
+        )
+        print(missing_devices.to_string(index=False))
+        # Drop candidate rows we cannot map to installed capacity — they cannot be
+        # evaluated for generation loss. This prevents pipeline failure while
+        # preserving other valid candidates.
+        df = df[~df["lost_capacity_kw"].isna()].copy()
     return df
 
 
@@ -177,16 +216,27 @@ def resolve_latest_risk_month(risk_scores_path: Path) -> pd.Period | None:
     return risk["risk_date"].max().to_period("M")
 
 
+def resolve_transformed_last_month(transformed_path: Path) -> pd.Period | None:
+    if not transformed_path.exists():
+        return None
+    transformed = pd.read_csv(transformed_path, parse_dates=["date"])
+    if transformed.empty:
+        return None
+    return pd.to_datetime(transformed["date"]).dt.to_period("M").max()
+
+
 def resolve_analysis_month_range(
     start_month: str | None,
     end_month: str | None,
     risk_scores_path: Path,
+    transformed_path: Path,
 ) -> tuple[pd.Period | None, pd.Period | None]:
     resolved_start = parse_calendar_month(start_month) if start_month else None
+    data_last_month = resolve_transformed_last_month(transformed_path)
     if end_month:
         resolved_end = parse_calendar_month(end_month)
     elif resolved_start is not None:
-        resolved_end = resolve_latest_risk_month(risk_scores_path) or resolved_start
+        resolved_end = data_last_month or resolve_latest_risk_month(risk_scores_path) or resolved_start
     else:
         resolved_end = None
     if resolved_start is not None and resolved_end is not None and resolved_start > resolved_end:
@@ -196,6 +246,13 @@ def resolve_analysis_month_range(
 
 def month_index_from_anchor(period: pd.Period, anchor: pd.Period) -> int:
     return (period.year - anchor.year) * 12 + period.month - anchor.month + 1
+
+
+def device_failure_probability(candidates: pd.DataFrame) -> pd.Series:
+    """Map risk_score (0-100) to failure probability for expected generation loss."""
+    if "risk_score" not in candidates.columns:
+        return pd.Series(1.0, index=candidates.index)
+    return (pd.to_numeric(candidates["risk_score"], errors="coerce").fillna(100.0) / 100.0).clip(0.0, 1.0)
 
 
 def compute_monthly_operational_row(
@@ -215,30 +272,46 @@ def compute_monthly_operational_row(
     holding_rate_annual: float,
     ai_recurring_monthly: float,
     spare_amort_months: int,
+    use_failure_probability: bool = True,
 ) -> dict[str, object]:
     baseline_loss_kwh = 0.0
     ai_loss_kwh = 0.0
     downtime_days_avoided = 0.0
 
-    if not month_candidates.empty:
-        for _, day_candidates in month_candidates.groupby("risk_date"):
-            ordered = day_candidates.sort_values(
-                ["lost_capacity_kw", "risk_score"],
-                ascending=[False, False],
-            ).reset_index(drop=True)
-            baseline_loss_kwh += (
-                ordered["lost_capacity_kw"].sum() * generation_hours_per_day * baseline_downtime_days
-            )
+    unique_candidates = month_candidates["device_name"].nunique() if not month_candidates.empty else 0
 
-            covered = ordered.iloc[:ai_stock]
-            uncovered = ordered.iloc[ai_stock:]
-            ai_loss_kwh += (
-                covered["lost_capacity_kw"].sum() * generation_hours_per_day * ai_covered_downtime_days
+    if not month_candidates.empty:
+        # One row per device-month (highest risk day), then rank for spare allocation.
+        month_devices = (
+            month_candidates.sort_values(["device_name", "risk_score"], ascending=[True, False])
+            .drop_duplicates("device_name", keep="first")
+            .copy()
+        )
+        if use_failure_probability:
+            month_devices["failure_probability"] = device_failure_probability(month_devices)
+        else:
+            month_devices["failure_probability"] = 1.0
+
+        ordered = month_devices.sort_values(
+            ["lost_capacity_kw", "risk_score"],
+            ascending=[False, False],
+        ).reset_index(drop=True)
+
+        for idx, row in ordered.iterrows():
+            probability = float(row["failure_probability"])
+            capacity_kw = float(row["lost_capacity_kw"])
+            baseline_loss_kwh += (
+                probability * capacity_kw * generation_hours_per_day * baseline_downtime_days
             )
-            ai_loss_kwh += (
-                uncovered["lost_capacity_kw"].sum() * generation_hours_per_day * ai_uncovered_downtime_days
-            )
-            downtime_days_avoided += len(covered) * max(0.0, lead_time_days)
+            if idx < ai_stock:
+                ai_loss_kwh += (
+                    probability * capacity_kw * generation_hours_per_day * ai_covered_downtime_days
+                )
+                downtime_days_avoided += probability * max(0.0, lead_time_days)
+            else:
+                ai_loss_kwh += (
+                    probability * capacity_kw * generation_hours_per_day * ai_uncovered_downtime_days
+                )
 
     baseline_loss_vnd = baseline_loss_kwh * price_vnd_per_kwh
     ai_loss_vnd = ai_loss_kwh * price_vnd_per_kwh
@@ -275,7 +348,7 @@ def compute_monthly_operational_row(
     return {
         "Month": month_index,
         "calendar_month": str(period),
-        "replacement_candidate_events": len(month_candidates),
+        "replacement_candidate_events": unique_candidates,
         "ai_stock_level_units": ai_stock,
         "downtime_days_avoided": downtime_days_avoided,
         "generation_saved_mwh": (baseline_loss_kwh - ai_loss_kwh) / 1000,
@@ -320,6 +393,8 @@ def build_monthly_deltas_from_pipeline(
     ai_recurring_monthly = get_number(assumptions, "ai_recurring_cost_monthly") or 0.0
     ai_stock = resolve_optimal_stock(inventory_summary_path, assumptions)
     spare_amort_months = int(get_number(assumptions, "spare_purchase_amortization_months") or 1)
+    use_failure_probability_raw = get_number(assumptions, "use_failure_probability_weighting")
+    use_failure_probability = True if use_failure_probability_raw is None else bool(use_failure_probability_raw)
 
     baseline_downtime_days = lead_time_days + installation_time_hours / 24
     ai_uncovered_downtime_days = baseline_downtime_days
@@ -339,6 +414,7 @@ def build_monthly_deltas_from_pipeline(
         "holding_rate_annual": holding_rate_annual,
         "ai_recurring_monthly": ai_recurring_monthly,
         "spare_amort_months": spare_amort_months,
+        "use_failure_probability": use_failure_probability,
     }
 
     candidates = read_candidate_events(candidates_path, daily_risk_dir)
@@ -347,7 +423,9 @@ def build_monthly_deltas_from_pipeline(
         candidates = load_candidate_capacity(candidates, transformed_path)
         candidates["month_period"] = candidates["risk_date"].dt.to_period("M")
 
-    analysis_start, analysis_end = resolve_analysis_month_range(start_month, end_month, risk_scores_path)
+    analysis_start, analysis_end = resolve_analysis_month_range(
+        start_month, end_month, risk_scores_path, transformed_path
+    )
 
     if analysis_start is not None:
         if not candidates.empty:
@@ -386,14 +464,21 @@ def build_monthly_deltas_from_pipeline(
                 candidates["risk_date"].max().date().isoformat() if not candidates.empty else None
             ),
             "ai_stock_level_units": ai_stock,
+            "generation_loss_method": (
+                "expected (failure_probability = risk_score / 100)"
+                if use_failure_probability
+                else "deterministic (failure_probability = 1)"
+            ),
         }
         return deltas, metadata
 
     if candidates.empty:
         return pd.DataFrame(), {"source": "input_data risk pipeline", "coverage_months": 0}
-    # Build a continuous month series anchored at the first candidate month
+    # Build a continuous month series from the first candidate month through the
+    # last month available in transformed generation data.
     first_period = candidates["month_period"].min()
-    month_periods = pd.period_range(first_period, periods=horizon_months, freq="M")
+    last_period = resolve_transformed_last_month(transformed_path) or candidates["month_period"].max()
+    month_periods = pd.period_range(first_period, last_period, freq="M")
     rows = []
     for period in month_periods:
         month_index = month_index_from_anchor(period, first_period)
@@ -414,6 +499,11 @@ def build_monthly_deltas_from_pipeline(
         "first_candidate_date": candidates["risk_date"].min().date().isoformat(),
         "last_candidate_date": candidates["risk_date"].max().date().isoformat(),
         "ai_stock_level_units": ai_stock,
+        "generation_loss_method": (
+            "expected (failure_probability = risk_score / 100)"
+            if use_failure_probability
+            else "deterministic (failure_probability = 1)"
+        ),
     }
     return deltas, metadata
 
@@ -506,14 +596,19 @@ def build_financial_outputs(
     )
     pv_operating_benefit = math.nan if monthly_rate is None else ai_npv - ai_cashflows[0]
 
+    without_ai = without_ai_reference_metrics(assumptions)
+
     comparison = pd.DataFrame(
         [
             {
                 "scenario": "Without AI",
-                "npv_vnd": 0.0 if monthly_rate is not None else math.nan,
-                "irr_monthly": None,
-                "irr_annual_effective": None,
-                "capex_ai_source": "",
+                "npv_vnd": without_ai["npv_vnd"],
+                "npv_usd": without_ai["npv_usd"],
+                "irr_quarterly": without_ai["irr_quarterly"],
+                "irr_monthly": without_ai["irr_monthly"],
+                "irr_annual_effective": without_ai["irr_annual_effective"],
+                "irr_period": without_ai["irr_period"],
+                "capex_ai_source": without_ai["baseline_source"],
                 "capex_ai_included_vnd": 0.0,
                 "max_capex_ai_for_npv_zero_vnd": None,
                 "cashflow_month_0_vnd": 0.0,

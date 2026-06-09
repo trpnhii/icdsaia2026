@@ -229,6 +229,13 @@ button,
   margin-bottom: 12px;
 }
 
+.panel-subtitle {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
 .status-chip {
   display: inline-flex;
   align-items: center;
@@ -332,6 +339,14 @@ th {
   font-size: 10px;
   font-weight: 500;
   text-transform: none;
+}
+
+.irr-sub {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
 }
 
 .risk-high {

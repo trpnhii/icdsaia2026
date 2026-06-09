@@ -29,10 +29,37 @@ function computeIrr(cashflows) {
   if (!anyPos || !anyNeg) return null;
   const npvAt = (rate) => cashflows.reduce((s, cf, i) => s + cf / Math.pow(1 + rate, i), 0);
   let low = -0.999999;
-  let high = 10.0;
   let lowVal = npvAt(low);
+  // Try to find a high bound by expanding exponentially until sign change or limit
+  let high = 0.1;
   let highVal = npvAt(high);
-  if (lowVal * highVal > 0) return null;
+  let attempts = 0;
+  while (lowVal * highVal > 0 && attempts < 80) {
+    high *= 2;
+    highVal = npvAt(high);
+    attempts += 1;
+    if (!Number.isFinite(highVal)) break;
+  }
+  if (lowVal * highVal > 0) {
+    // last resort: try scanning a grid of candidate rates
+    const candidates = [0.0001, 0.001, 0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10, 50, 100];
+    let found = false;
+    for (let i = 0; i < candidates.length - 1 && !found; i += 1) {
+      const a = candidates[i];
+      const b = candidates[i + 1];
+      const va = npvAt(a);
+      const vb = npvAt(b);
+      if (va * vb <= 0) {
+        low = a;
+        high = b;
+        lowVal = va;
+        highVal = vb;
+        found = true;
+      }
+    }
+    if (!found) return null;
+  }
+  // Bisection
   for (let i = 0; i < 200; i += 1) {
     const mid = (low + high) / 2;
     const midVal = npvAt(mid);
@@ -164,7 +191,8 @@ function drawBarChart(svgId, rows, xKey, yKey, optimalN) {
   svg.innerHTML = "";
   const width = Number(svg.viewBox.baseVal.width);
   const height = Number(svg.viewBox.baseVal.height);
-  const pad = { left: 42, right: 16, top: 16, bottom: 34 };
+  const hasYearLabels = rows.some((row) => row.year);
+  const pad = { left: 42, right: 16, top: 16, bottom: hasYearLabels ? 44 : 34 };
   const maxVal = Math.max(...rows.map((row) => Number(row[yKey] || 0)), 1);
   const chartW = width - pad.left - pad.right;
   const slotW = chartW / rows.length;
@@ -183,10 +211,22 @@ function drawBarChart(svgId, rows, xKey, yKey, optimalN) {
       "beforeend",
       `<rect class="${cls}" x="${x}" y="${y(row[yKey])}" width="${barW}" height="${barH}" rx="3"></rect>`
     );
-    if (rows.length <= 12) {
+    const labelSize = rows.length > 10 ? 8 : 10;
+    const labelY = rows.length > 10 ? height - 20 : height - 12;
+    const labelText = row.label || row.calendar_month || row[xKey];
+    if (row.year && String(labelText).includes(String(row.year))) {
+      const monthOnly = labelText.replace(` ${row.year}`, "");
       svg.insertAdjacentHTML(
         "beforeend",
-        `<text x="${x + barW / 2}" y="${height - 12}" font-size="10" text-anchor="middle" fill="#697586">${row.label || row[xKey]}</text>`
+        `<text x="${x + barW / 2}" y="${labelY}" font-size="${labelSize}" text-anchor="middle" fill="#697586">
+          <tspan x="${x + barW / 2}">${monthOnly}</tspan>
+          <tspan x="${x + barW / 2}" dy="10">${row.year}</tspan>
+        </text>`
+      );
+    } else {
+      svg.insertAdjacentHTML(
+        "beforeend",
+        `<text x="${x + barW / 2}" y="${height - 12}" font-size="${labelSize}" text-anchor="middle" fill="#697586">${labelText}</text>`
       );
     }
   });
@@ -334,8 +374,8 @@ function switchTab(tabName) {
 function renderKpis() {
   setText("latestDate", data.risk?.latest_scored_date || "-");
   setText("npvValue", vndShort(data.financial?.npv_vnd));
-  // Prefer precomputed IRR, otherwise compute from timeline (if capex present)
-  let irr = data.financial?.irr_monthly;
+  // Prefer pipeline IRR from financial summary; fall back to timeline cashflows.
+  let irr = data.financial?.irr_monthly ?? data.financial?.irr_raw_monthly;
   if ((irr === null || irr === undefined) && Array.isArray(data.timeline) && data.timeline.length) {
     const capex = Number(data.financial?.capex_ai_vnd || 0);
     const cashflows = [-(capex || 0)];
@@ -343,7 +383,11 @@ function renderKpis() {
     const computed = computeIrr(cashflows);
     irr = computed;
   }
-  setText("irrValue", pct(irr));
+  if (irr !== null && irr !== undefined) {
+    setText("irrValue", `${pct(irr)} / month`);
+  } else {
+    setText("irrValue", "-");
+  }
   setText("optimalN", data.inventory?.optimal_n ?? "-");
   setText("candidateDays", data.risk?.replacement_candidate_days ?? "-");
   setText("capexLabel", `CAPEX ${vndShort(data.financial?.capex_ai_vnd)}`);
@@ -475,6 +519,33 @@ function renderMonthlyAbnormal() {
     .join("");
 }
 
+function monthlyToQuarterlyIrr(irrMonthly) {
+  return (1 + irrMonthly) ** 3 - 1;
+}
+
+function formatScenarioIrr(row) {
+  if (row.irr_period === "quarter" && row.irr_quarterly !== null && row.irr_quarterly !== undefined) {
+    return `${pct(row.irr_quarterly)} / quarter`;
+  }
+  if (row.irr_monthly === null || row.irr_monthly === undefined) return "-";
+  const monthly = `${pct(row.irr_monthly)} / month`;
+  if (row.irr_quarterly !== null && row.irr_quarterly !== undefined) {
+    return `${monthly}<br><span class="irr-sub">${pct(row.irr_quarterly)} / quarter</span>`;
+  }
+  return monthly;
+}
+
+function formatVarianceIrr(variance) {
+  const parts = [];
+  if (variance.irr_quarterly !== null && variance.irr_quarterly !== undefined) {
+    parts.push(`${pct(variance.irr_quarterly)} / quarter`);
+  }
+  if (variance.irr_monthly !== null && variance.irr_monthly !== undefined) {
+    parts.push(`${pct(variance.irr_monthly)} / month`);
+  }
+  return parts.length ? parts.join("<br>") : "-";
+}
+
 function renderScenarioComparison() {
   const rows = taskFlow.scenarioComparison || [];
   const variance = taskFlow.scenarioVariance || {};
@@ -487,7 +558,7 @@ function renderScenarioComparison() {
       (row) => `
         <tr>
           <th>${row.scenario}${row.note ? `<small class="cell-note">${row.note}</small>` : ""}</th>
-          <td>${row.irr_monthly === null || row.irr_monthly === undefined ? "-" : pct(row.irr_monthly)}</td>
+          <td>${formatScenarioIrr(row)}</td>
           <td>${row.npv_vnd === null || row.npv_vnd === undefined ? "-" : vndShort(row.npv_vnd)}</td>
         </tr>
       `
@@ -497,7 +568,7 @@ function renderScenarioComparison() {
   foot.innerHTML = `
     <tr>
       <th>Variance</th>
-      <td>${variance.irr_monthly === null || variance.irr_monthly === undefined ? "-" : pct(variance.irr_monthly)}</td>
+      <td>${formatVarianceIrr(variance)}</td>
       <td>${variance.npv_vnd === null || variance.npv_vnd === undefined ? "-" : vndShort(variance.npv_vnd)}</td>
     </tr>
   `;
@@ -556,7 +627,13 @@ function renderTaskFlow() {
     firstLabel: alarmRows[0]?.date?.slice(5) || "",
     lastLabel: alarmRows[alarmRows.length - 1]?.date?.slice(5) || "",
   });
-  drawBarChart("purchaseChart", taskFlow.monthlyAbnormal || [], "month", "quantity");
+  const purchaseRows = taskFlow.monthlyAbnormal || [];
+  const purchaseMeta = taskFlow.purchasingSchedule || {};
+  setText(
+    "purchaseScheduleSubtitle",
+    purchaseMeta.year_range ? `Period: ${purchaseMeta.start_month} → ${purchaseMeta.end_month} (${purchaseMeta.year_range})` : ""
+  );
+  drawBarChart("purchaseChart", purchaseRows, "month", "quantity");
 }
 
 function render() {

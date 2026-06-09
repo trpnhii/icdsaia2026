@@ -36,6 +36,7 @@ RISK_PATH = OUTPUT_DIR / "risk_scores.csv"
 CANDIDATES_PATH = OUTPUT_DIR / "replacement_candidates.csv"
 WATCHLIST_PATH = OUTPUT_DIR / "risk_watchlist.csv"
 DAILY_OUTPUT_DIR = OUTPUT_DIR / "daily"
+GROUND_TRUTH_PATH = OUTPUT_DIR / "ground_truth_replacements.csv"
 
 MIN_IRRADIATION = 0.5
 
@@ -272,7 +273,109 @@ def build_risk_scores(
         ["risk_date", "replacement_candidate", "replacement_window", "risk_score", "fleet_relative_risk_score"],
         ascending=[True, False, True, False, False],
     )
+    # Apply persistence filter to reduce spurious single-day replacement flags.
+    # Configurable via thresholds.replacement_candidate.persistence (window_days, required_days).
+    persistence_cfg = {}
+    if thresholds is None:
+        thresholds = load_risk_thresholds()
+    if isinstance(thresholds, dict):
+        persistence_cfg = thresholds.get("persistence", {})
+    window_days = int(persistence_cfg.get("window_days", 5))
+    required_days = int(persistence_cfg.get("required_days", 3))
+
+    # Compute persistence per device by ordering by device_name -> risk_date,
+    # computing a rolling sum of the boolean replacement_candidate flag.
+    try:
+        tmp = risk.sort_values(["device_name", "risk_date"]).copy()
+        tmp["replacement_candidate_flag"] = tmp["replacement_candidate"].astype(int)
+        tmp["persistence_count"] = (
+            tmp.groupby("device_name")["replacement_candidate_flag"]
+            .apply(lambda s: s.rolling(window=window_days, min_periods=1).sum())
+            .reset_index(level=0, drop=True)
+        )
+        # Merge persistence_count back onto the main risk frame
+        risk = risk.merge(
+            tmp[["device_name", "risk_date", "persistence_count"]],
+            on=["device_name", "risk_date"],
+            how="left",
+        )
+        # Only keep replacement candidates that meet persistence requirement
+        before = risk["replacement_candidate"].sum()
+        risk["replacement_candidate"] = (
+            risk["replacement_candidate"] & (risk["persistence_count"] >= required_days)
+        )
+        after = int(risk["replacement_candidate"].sum())
+        if before != after:
+            print(f"Applied persistence filter: candidates reduced {before} -> {after} (window={window_days}, required={required_days})")
+    except Exception as exc:  # do not fail scoring for persistence computation
+        print(f"Warning: could not compute persistence filter: {exc}")
     candidates = risk[risk["replacement_candidate"]].copy()
+
+    # If a ground-truth replacements file exists, merge it in as high-confidence
+    # replacement candidates so downstream financial code can use it as truth.
+    # Expected columns (flexible): device_name, zone (optional), replacement_date | risk_date | date
+    # Or monthly aggregated: calendar_month (YYYY-MM) with a count column 'replacement_candidate_events'.
+    if GROUND_TRUTH_PATH.exists():
+        try:
+            gt = pd.read_csv(GROUND_TRUTH_PATH)
+            if gt.empty:
+                print(f"Ground-truth file found but empty: {GROUND_TRUTH_PATH}")
+            else:
+                # Normalize date column
+                date_col = None
+                for c in ("risk_date", "replacement_date", "date", "replacement_day"):
+                    if c in gt.columns:
+                        date_col = c
+                        break
+
+                if date_col is not None:
+                    gt[date_col] = pd.to_datetime(gt[date_col], errors="coerce")
+                    gt = gt.dropna(subset=[date_col])
+
+                    # Map numeric site zone from transformed devices. Drop the optional
+                    # string zone column in ground-truth to avoid merge suffix conflicts.
+                    if "zone" in gt.columns:
+                        gt = gt.rename(columns={"zone": "site_zone"})
+                    devices = (
+                        _prepare_valid_rows(input_path)[["zone", "device_name"]]
+                        .drop_duplicates()
+                    )
+                    gt = gt.merge(devices, on="device_name", how="left")
+                    gt = gt.dropna(subset=["zone"]).copy()
+                    gt["zone"] = gt["zone"].astype(int)
+
+                    # Build candidate-like rows
+                    gt_rows: list[pd.Series] = []
+                    for _, row in gt.iterrows():
+                        cand = {
+                            "risk_date": pd.Timestamp(row[date_col]),
+                            "zone": int(row["zone"]),
+                            "device_name": row["device_name"],
+                            "latest_date": pd.Timestamp(row[date_col]),
+                            "risk_score": 100.0,
+                            "fleet_relative_risk_score": 100.0,
+                            "replacement_window": "ground_truth",
+                            "replacement_candidate": True,
+                        }
+                        gt_rows.append(pd.Series(cand))
+
+                    if gt_rows:
+                        gt_df = pd.DataFrame(gt_rows)
+                        # Cast columns to align with 'candidates'
+                        combined = pd.concat([candidates, gt_df], ignore_index=True, sort=False)
+                        # Drop exact duplicates (same device + risk_date)
+                        combined = combined.drop_duplicates(subset=["device_name", "risk_date"], keep="last")
+                        candidates = combined
+                        print(f"Merged {len(gt_df)} ground-truth replacements into candidates from {GROUND_TRUTH_PATH}")
+                elif "calendar_month" in gt.columns:
+                    # If user provided monthly aggregates, we cannot map to devices here.
+                    # We'll surface a warning and skip device-level merge.
+                    print(f"Ground-truth file {GROUND_TRUTH_PATH} contains monthly aggregates; device-level mapping required. Skipping merge.")
+                else:
+                    print(f"Ground-truth file {GROUND_TRUTH_PATH} found but no usable date/device columns.")
+        except Exception as exc:  # noqa: BLE001 - we want to surface errors without stopping pipeline
+            print(f"Error loading ground-truth replacements from {GROUND_TRUTH_PATH}: {exc}")
+
     return risk.reset_index(drop=True), candidates.reset_index(drop=True)
 
 
