@@ -1487,7 +1487,7 @@ window.DASHBOARD_DATA = {
     "equipmentRows": [
       {
         "equipment": "HF18 INV1",
-        "pr_pct": 35.7,
+        "pr_loss_pct": 77.9,
         "candidate_days": 14.0,
         "weighted_event_days": 10.8,
         "baseline_generation_loss_kwh": 78226.9,
@@ -1499,7 +1499,7 @@ window.DASHBOARD_DATA = {
       },
       {
         "equipment": "HF17 INV3",
-        "pr_pct": 40.3,
+        "pr_loss_pct": 60.0,
         "candidate_days": 15.0,
         "weighted_event_days": 9.7,
         "baseline_generation_loss_kwh": 70259.4,
@@ -1511,7 +1511,7 @@ window.DASHBOARD_DATA = {
       },
       {
         "equipment": "HF18 INV2",
-        "pr_pct": 41.4,
+        "pr_loss_pct": 72.7,
         "candidate_days": 12.0,
         "weighted_event_days": 8.7,
         "baseline_generation_loss_kwh": 63016.2,
@@ -1523,7 +1523,7 @@ window.DASHBOARD_DATA = {
       },
       {
         "equipment": "HF17 INV1",
-        "pr_pct": 37.7,
+        "pr_loss_pct": 57.1,
         "candidate_days": 12.0,
         "weighted_event_days": 7.7,
         "baseline_generation_loss_kwh": 55772.9,
@@ -1535,7 +1535,7 @@ window.DASHBOARD_DATA = {
       },
       {
         "equipment": "HF18 INV3",
-        "pr_pct": 40.5,
+        "pr_loss_pct": 69.9,
         "candidate_days": 8.0,
         "weighted_event_days": 5.7,
         "baseline_generation_loss_kwh": 41286.4,
@@ -1547,7 +1547,7 @@ window.DASHBOARD_DATA = {
       },
       {
         "equipment": "HF17 INV2",
-        "pr_pct": 39.1,
+        "pr_loss_pct": 51.4,
         "candidate_days": 10.0,
         "weighted_event_days": 6.1,
         "baseline_generation_loss_kwh": 44183.7,
@@ -1559,7 +1559,7 @@ window.DASHBOARD_DATA = {
       },
       {
         "equipment": "HF20 INV1",
-        "pr_pct": 32.8,
+        "pr_loss_pct": 77.9,
         "candidate_days": 2.0,
         "weighted_event_days": 1.6,
         "baseline_generation_loss_kwh": 11589.2,
@@ -1571,7 +1571,7 @@ window.DASHBOARD_DATA = {
       },
       {
         "equipment": "HF18 INV4",
-        "pr_pct": 45.3,
+        "pr_loss_pct": 64.8,
         "candidate_days": 6.0,
         "weighted_event_days": 4.1,
         "baseline_generation_loss_kwh": 29697.3,
@@ -1583,7 +1583,7 @@ window.DASHBOARD_DATA = {
       },
       {
         "equipment": "HF17 INV4",
-        "pr_pct": 51.0,
+        "pr_loss_pct": 66.1,
         "candidate_days": 4.0,
         "weighted_event_days": 2.6,
         "baseline_generation_loss_kwh": 18832.4,

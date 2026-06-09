@@ -484,7 +484,7 @@ function renderEquipmentComparison() {
       (row) => `
         <tr>
           <th>${row.equipment}</th>
-          <td>${number.format(row.pr_pct)}</td>
+          <td>${number.format(row.pr_loss_pct)}</td>
           <td>${money.format(row.baseline_generation_loss_kwh)}</td>
           <td>${money.format(row.baseline_revenue_loss_vnd)}</td>
           <td>${money.format(row.baseline_measure_cost_vnd)}</td>

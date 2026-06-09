@@ -350,7 +350,10 @@ def equipment_operational_rows(limit: int = 9, as_of: pd.Timestamp | None = None
         if subset.empty:
             continue
         capacity_kwp = float(subset["installed_capacity_kwp"].iloc[0])
-        pr_pct = round(float(subset["latest_pr"].mean()) * 100, 1)
+        if "mean_deficit_14d" in subset.columns:
+            pr_loss_pct = round(float(subset["mean_deficit_14d"].mean()) * 100, 1)
+        else:
+            pr_loss_pct = round(float((1 - subset["latest_relative_pr"]).clip(0, 1).mean()) * 100, 1)
         weighted_event_days = weighted_event_days_by_device.get((int(device["zone"]), str(device["device_name"])), 0.0)
         candidate_days = float(subset["risk_date"].nunique())
         baseline_gen_kwh = weighted_event_days * lead_time_days * generation_hours * capacity_kwp
@@ -364,7 +367,7 @@ def equipment_operational_rows(limit: int = 9, as_of: pd.Timestamp | None = None
         rows.append(
             {
                 "equipment": str(device["device_name"]).replace(" Inverter ", " INV"),
-                "pr_pct": pr_pct,
+                "pr_loss_pct": pr_loss_pct,
                 "candidate_days": round(candidate_days, 1),
                 "weighted_event_days": round(weighted_event_days, 2),
                 "baseline_generation_loss_kwh": round(baseline_gen_kwh, 1),
