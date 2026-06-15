@@ -373,7 +373,8 @@ def build_figure1_stl(transformed: pd.DataFrame) -> tuple[Path, dict[str, float]
     stl_result, metrics = compute_stl_metrics(daily_pr)
 
     plt.style.use(STYLE)
-    fig, axes = plt.subplots(4, 1, figsize=(13, 10), sharex=True)
+    fig, axes = plt.subplots(2, 2, figsize=(12, 8), sharex=True)
+    axes = axes.flatten()
     fig.suptitle("Figure 1. STL Decomposition of Daily Mean PR", fontsize=14, fontweight="bold")
 
     components = [

@@ -224,7 +224,8 @@ def plot_stl(
     out_path: Path,
 ) -> None:
     plt.style.use(STYLE)
-    fig, axes = plt.subplots(4, 1, figsize=(12, 10), sharex=True)
+    fig, axes = plt.subplots(2, 2, figsize=(12, 8), sharex=True)
+    axes = axes.flatten()
     fig.suptitle("Figure 1: STL Decomposition – Daily Mean Performance Ratio", fontsize=14, fontweight="bold")
 
     dates = daily_pr["date"]
