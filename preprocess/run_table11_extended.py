@@ -19,7 +19,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import HistGradientBoostingClassifier, IsolationForest
-from sklearn.metrics import f1_score
 from sklearn.preprocessing import StandardScaler
 
 
@@ -257,15 +256,68 @@ def build_iforest_alerts(train: pd.DataFrame, test: pd.DataFrame) -> pd.DataFram
     return alerts
 
 
+def _feature_matrix(df: pd.DataFrame) -> np.ndarray:
+    cols = ["performance_ratio", "relative_pr", "peer_deficit", "mean_deficit_14d", "severe_low_14d", "pr_slope_30d"]
+    return df[cols].fillna(0.0).to_numpy()
+
+
+def _score_to_proba(model: object, X: np.ndarray) -> np.ndarray:
+    if hasattr(model, "predict_proba"):
+        return np.asarray(model.predict_proba(X)[:, 1], dtype=float)
+    scores = np.asarray(model.decision_function(X), dtype=float)
+    # map unbounded scores to (0,1) for threshold search
+    return 1.0 / (1.0 + np.exp(-scores))
+
+
+def tune_threshold_on_val_emc(
+    model: object,
+    val: pd.DataFrame,
+    events_val: pd.DataFrame,
+    lead_window_days: int,
+    episode_gap_days: int,
+    fp_inspection_cost_usd: float,
+    fn_miss_cost_usd: float,
+) -> tuple[float, float]:
+    """Pick probability cutoff on validation only by minimizing event-level EMC."""
+    if val.empty or events_val.empty:
+        return 0.5, float("inf")
+
+    X_val = _feature_matrix(val)
+    proba = _score_to_proba(model, X_val)
+    thresholds = np.linspace(0.05, 0.95, 37)
+    best_t, best_cost = 0.5, float("inf")
+    for t in thresholds:
+        pred = proba >= t
+        alerts = val.loc[pred, ["zone", "device_key", "date"]].rename(columns={"date": "alert_date"})
+        collapsed = collapse_alert_episodes(alerts, episode_gap_days)
+        metrics = evaluate_event_alerts(
+            "val_tune",
+            collapsed,
+            events_val,
+            lead_window_days,
+            fp_inspection_cost_usd,
+            fn_miss_cost_usd,
+        )
+        if metrics.expected_maintenance_cost_usd < best_cost:
+            best_cost = metrics.expected_maintenance_cost_usd
+            best_t = float(t)
+    return best_t, best_cost
+
+
 def train_supervised_and_alerts(
     train: pd.DataFrame,
+    val: pd.DataFrame,
     test: pd.DataFrame,
     y_train: np.ndarray,
-    y_test: np.ndarray,
-) -> list[tuple[str, pd.DataFrame]]:
-    cols = ["performance_ratio", "relative_pr", "peer_deficit", "mean_deficit_14d", "severe_low_14d", "pr_slope_30d"]
-    X_train = train[cols].fillna(0.0).to_numpy()
-    X_test = test[cols].fillna(0.0).to_numpy()
+    events_val: pd.DataFrame,
+    lead_window_days: int,
+    episode_gap_days: int,
+    fp_inspection_cost_usd: float,
+    fn_miss_cost_usd: float,
+) -> list[tuple[str, pd.DataFrame, float, float]]:
+    """Fit on train, tune threshold on val (EMC), alert on test only."""
+    X_train = _feature_matrix(train)
+    X_test = _feature_matrix(test)
     models: list[tuple[str, object]] = []
 
     # always available fallback
@@ -303,29 +355,50 @@ def train_supervised_and_alerts(
                     learning_rate=0.05,
                     num_leaves=31,
                     random_state=42,
+                    verbosity=-1,
                 ),
             )
         )
     except Exception:
         pass
 
-    outputs: list[tuple[str, pd.DataFrame]] = []
+    outputs: list[tuple[str, pd.DataFrame, float, float]] = []
     for name, model in models:
         model.fit(X_train, y_train)
-        proba = model.predict_proba(X_train)[:, 1] if hasattr(model, "predict_proba") else model.decision_function(X_train)
-        thresholds = np.linspace(0.05, 0.95, 37)
-        best_t, best_f1 = 0.5, -1.0
-        for t in thresholds:
-            pred = (proba >= t).astype(int)
-            score = f1_score(y_train, pred, zero_division=0)
-            if score > best_f1:
-                best_f1, best_t = score, t
-
-        test_proba = model.predict_proba(X_test)[:, 1] if hasattr(model, "predict_proba") else model.decision_function(X_test)
+        best_t, best_val_emc = tune_threshold_on_val_emc(
+            model,
+            val,
+            events_val,
+            lead_window_days,
+            episode_gap_days,
+            fp_inspection_cost_usd,
+            fn_miss_cost_usd,
+        )
+        test_proba = _score_to_proba(model, X_test)
         test_pred = test_proba >= best_t
         alerts = test.loc[test_pred, ["zone", "device_key", "date"]].rename(columns={"date": "alert_date"})
-        outputs.append((name, alerts))
+        outputs.append((name, alerts, best_t, best_val_emc))
     return outputs
+
+
+def chronological_train_val_test(
+    panel: pd.DataFrame,
+    train_frac: float,
+    val_frac: float,
+) -> tuple[pd.Timestamp, pd.Timestamp, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """
+    Date-quantile split: [0, train_frac] train, (train_frac, train_frac+val_frac] val,
+    remainder test. Defaults aim for ~55% / 15% / 30% while keeping the historical
+    ~30% holdout test mass used in earlier Table 11 runs.
+    """
+    if train_frac <= 0 or val_frac <= 0 or train_frac + val_frac >= 1.0:
+        raise ValueError("Require train_frac>0, val_frac>0, and train_frac+val_frac<1.")
+    train_cut = panel["date"].quantile(train_frac)
+    val_cut = panel["date"].quantile(train_frac + val_frac)
+    train = panel[panel["date"] <= train_cut].copy()
+    val = panel[(panel["date"] > train_cut) & (panel["date"] <= val_cut)].copy()
+    test = panel[panel["date"] > val_cut].copy()
+    return pd.Timestamp(train_cut), pd.Timestamp(val_cut), train, val, test
 
 
 def make_row_labels_from_events(df: pd.DataFrame, events: pd.DataFrame, lead_window_days: int) -> np.ndarray:
@@ -352,6 +425,18 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--fp-inspection-cost-usd", type=float, default=10.0)
     p.add_argument("--fn-miss-cost-usd", type=float, default=1500.0)
     p.add_argument("--random-seed", type=int, default=42)
+    p.add_argument(
+        "--train-frac",
+        type=float,
+        default=0.55,
+        help="Chronological quantile end of the train window (exclusive of val/test).",
+    )
+    p.add_argument(
+        "--val-frac",
+        type=float,
+        default=0.15,
+        help="Chronological quantile width of the validation window after train.",
+    )
     return p.parse_args()
 
 
@@ -365,15 +450,23 @@ def main() -> None:
     if len(synthetic_events) < 100:
         raise RuntimeError(f"Synthetic injection produced only {len(synthetic_events)} events; expected >= 100.")
 
-    cutoff = panel["date"].quantile(0.7)
-    train = panel[panel["date"] <= cutoff].copy()
-    test = panel[panel["date"] > cutoff].copy()
-    events_test = synthetic_events[synthetic_events["replacement_date"] > cutoff].copy()
+    train_cut, val_cut, train, val, test = chronological_train_val_test(
+        panel, args.train_frac, args.val_frac
+    )
+    events_train = synthetic_events[synthetic_events["replacement_date"] <= train_cut].copy()
+    events_val = synthetic_events[
+        (synthetic_events["replacement_date"] > train_cut)
+        & (synthetic_events["replacement_date"] <= val_cut)
+    ].copy()
+    events_test = synthetic_events[synthetic_events["replacement_date"] > val_cut].copy()
 
     y_train = make_row_labels_from_events(train, synthetic_events, args.lead_window_days)
-    y_test = make_row_labels_from_events(test, synthetic_events, args.lead_window_days)
 
     results: list[MethodMetrics] = []
+    threshold_rows: list[dict[str, object]] = []
+
+    # Fit Isolation Forest on train+val chronology before test (no labels / no threshold tuning).
+    pre_test = pd.concat([train, val], ignore_index=True)
 
     solar_alerts = collapse_alert_episodes(build_solar_guard_alerts(test), args.episode_gap_days)
     solar = evaluate_event_alerts(
@@ -386,7 +479,7 @@ def main() -> None:
     )
     results.append(MethodMetrics(**{**solar.__dict__, "zero_shot_ready": "Yes"}))
 
-    iforest_alerts = collapse_alert_episodes(build_iforest_alerts(train, test), args.episode_gap_days)
+    iforest_alerts = collapse_alert_episodes(build_iforest_alerts(pre_test, test), args.episode_gap_days)
     iforest = evaluate_event_alerts(
         "Isolation Forest (Zero-shot)",
         iforest_alerts,
@@ -397,7 +490,17 @@ def main() -> None:
     )
     results.append(MethodMetrics(**{**iforest.__dict__, "zero_shot_ready": "Yes"}))
 
-    for model_name, alerts in train_supervised_and_alerts(train, test, y_train, y_test):
+    for model_name, alerts, best_t, best_val_emc in train_supervised_and_alerts(
+        train,
+        val,
+        test,
+        y_train,
+        events_val,
+        args.lead_window_days,
+        args.episode_gap_days,
+        args.fp_inspection_cost_usd,
+        args.fn_miss_cost_usd,
+    ):
         collapsed = collapse_alert_episodes(alerts, args.episode_gap_days)
         row = evaluate_event_alerts(
             model_name,
@@ -408,17 +511,32 @@ def main() -> None:
             args.fn_miss_cost_usd,
         )
         results.append(MethodMetrics(**{**row.__dict__, "zero_shot_ready": "No"}))
+        threshold_rows.append(
+            {
+                "method": model_name,
+                "threshold_tuned_on": "validation_EMC",
+                "best_threshold": best_t,
+                "val_emc_usd": best_val_emc,
+                "val_events": len(events_val),
+            }
+        )
 
     table = pd.DataFrame([r.__dict__ for r in results]).sort_values(
         ["expected_maintenance_cost_usd", "f1"], ascending=[True, False]
     )
     table.to_csv(OUTPUT_CSV, index=False, encoding="utf-8-sig")
+    thr_path = OUTPUT_DIR / "table11_supervised_thresholds.csv"
+    pd.DataFrame(threshold_rows).to_csv(thr_path, index=False, encoding="utf-8-sig")
 
     lines = [
         "# Table 11 Extended — Supervised Baselines, Synthetic Faults, and Cost-Sensitive Evaluation",
         "",
         f"- Synthetic events injected: {len(synthetic_events)}",
-        f"- Events in test window: {len(events_test)}",
+        f"- Chronological split: train ≤ {train_cut.date()} "
+        f"(frac={args.train_frac:.2f}), val ≤ {val_cut.date()} "
+        f"(+{args.val_frac:.2f}), test after {val_cut.date()}",
+        f"- Events: train={len(events_train)}, val={len(events_val)}, test={len(events_test)}",
+        f"- Supervised thresholds: fit on train; tuned on **validation EMC only**; reported on test",
         f"- Lead window: {args.lead_window_days} days",
         f"- Cost model: FP=${args.fp_inspection_cost_usd:.2f}, FN=${args.fn_miss_cost_usd:.2f}",
         "",
@@ -438,17 +556,27 @@ def main() -> None:
             "",
             "## Interpretation",
             "",
-            "- Supervised Gradient Boosting baselines may obtain stronger F1 after label accumulation.",
-            "- Zero-shot methods (SolarGuard / Isolation Forest) are deployable immediately without months of labels.",
+            "- Supervised models are fit on the train window; decision thresholds minimize validation EMC and are frozen before test evaluation.",
+            "- Zero-shot methods (SolarGuard / Isolation Forest) need no labeled failures for threshold selection.",
             "- Cost-sensitive ranking highlights operational value directly: lower expected maintenance cost is better.",
+            "",
+            f"Supervised threshold audit: `{thr_path.relative_to(PROJECT_ROOT)}`",
         ]
     )
     OUTPUT_MD.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     print(f"Table 11 CSV -> {OUTPUT_CSV}")
     print(f"Table 11 Markdown -> {OUTPUT_MD}")
+    print(f"Threshold audit -> {thr_path}")
+    print(
+        f"Split dates: train≤{train_cut.date()}, val≤{val_cut.date()}, "
+        f"events train/val/test={len(events_train)}/{len(events_val)}/{len(events_test)}"
+    )
     print()
     print(table.to_string(index=False))
+    if threshold_rows:
+        print()
+        print(pd.DataFrame(threshold_rows).to_string(index=False))
 
 
 if __name__ == "__main__":

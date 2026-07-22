@@ -89,7 +89,11 @@ def build_cost_curve(
 ) -> pd.DataFrame:
     daily_counts = candidates.groupby("risk_date").size()
     if max_stock is None:
-        max_stock = int(daily_counts.max()) if not daily_counts.empty else 0
+        # Cover at least the peak simultaneous candidates and the reference
+        # fixed-prestock comparator used in Priority-1 / Table 2.
+        peak = int(daily_counts.max()) if not daily_counts.empty else 0
+        max_stock = peak
+    max_stock = int(max_stock)
 
     rows = []
     for stock_n in range(max_stock + 1):
@@ -206,6 +210,24 @@ generation_loss_vnd = lead_time_days * generation_hours_per_day
 
 If generation_hours_per_day is set to 1, the model follows the simplified formula requested. For solar production, generation_hours_per_day should ideally be set to the site's expected equivalent full-generation hours per day.
 
+## Lead time vs early-warning role
+
+China / overseas procurement lead time is **{args.lead_time_days:g} days**. Short
+anomaly warnings (on the order of a few days) cannot complete a new overseas
+order in time. Pre-stocking is therefore required so that early warnings can
+reserve a **local** spare and schedule replacement, rather than waiting out the
+full procurement delay after hard failure.
+
+## Fixed overstock vs cost-minimizing AI stock
+
+Compare the cost-minimizing N above with a fixed policy that keeps more spares
+than needed (for example N = 10). Extra units beyond the simultaneous-candidate
+peak add holding cost and tied-up capital with little additional shortage
+reduction. See Priority-1 artifacts:
+
+- `output_data/experimental_results/priority1_inventory_comparison.md`
+- `python preprocess/run_priority1_revision.py`
+
 ## Outputs
 
 - Cost summary: `{SUMMARY_PATH.relative_to(PROJECT_ROOT)}`
@@ -301,13 +323,22 @@ def main() -> None:
     args = resolve_settings(parse_args())
     INVENTORY_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     candidates = load_candidate_capacity()
+    # Ensure the cost curve includes the reference fixed pre-stock level (e.g. N=10).
+    with Path(args.config).open(encoding="utf-8") as handle:
+        cfg_full = json.load(handle)
+    reference_n = int(cfg_full.get("reference_prestock_units") or 0)
+    max_stock = args.max_stock
+    if max_stock is None:
+        peak = int(candidates.groupby("risk_date").size().max()) if not candidates.empty else 0
+        max_stock = max(peak, reference_n)
+
     curve = build_cost_curve(
         candidates,
         lead_time_days=args.lead_time_days,
         electricity_price_vnd_per_kwh=args.electricity_price_vnd_per_kwh,
         holding_cost_vnd_per_unit=args.holding_cost_vnd_per_unit,
         generation_hours_per_day=args.generation_hours_per_day,
-        max_stock=args.max_stock,
+        max_stock=max_stock,
     )
     optimal = curve.loc[curve["total_cost_vnd"].idxmin()]
     breakeven = find_breakeven(curve, args.holding_cost_vnd_per_unit)

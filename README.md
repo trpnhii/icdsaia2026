@@ -76,13 +76,22 @@ python preprocess/run_table11_extended.py \
   --target-events 300 \
   --lead-window-days 30 \
   --fp-inspection-cost-usd 10 \
-  --fn-miss-cost-usd 1500
+  --fn-miss-cost-usd 1500 \
+  --train-frac 0.55 \
+  --val-frac 0.15
 ```
+
+Chronological protocol:
+
+1. **Train** (first `train-frac` of dates): fit supervised models.
+2. **Validation** (next `val-frac`): tune probability cutoffs by minimizing event-level EMC only.
+3. **Test** (remainder): report Table 11 metrics; thresholds are frozen.
 
 Outputs:
 
 - `output_data/experimental_results/table11_extended_comparison.csv`
 - `output_data/experimental_results/table11_extended_comparison.md`
+- `output_data/experimental_results/table11_supervised_thresholds.csv`
 
 Current default run:
 
@@ -161,4 +170,34 @@ Suggested minimal setup:
 
 Even a 1-2 event holdout materially improves methodological transparency by
 showing the model is validated on both simulated and actual operational faults.
+
+## Priority 1 Paper Revisions (Lead Time, Inventory Honesty, MWh Bridge)
+
+ICDSAIA strict-review Priority 1 is addressed by regenerating transparent
+artifacts from the inventory cost model:
+
+```bash
+python preprocess/run_priority1_revision.py
+```
+
+Outputs (under `output_data/experimental_results/`):
+
+- `priority1_revision_summary.md` — start here
+- `priority1_lead_time_role.md` — 2.51-day warning vs 14-day procurement
+- `priority1_inventory_comparison.md` / `.csv` — Reactive vs Fixed N=10 vs AI N*
+- `priority1_inventory_horizons.csv` + `figure_priority1_inventory_horizons.png`
+- `priority1_mwh_npv_bridge.md` / `.csv` — preserved MWh → projection → USD benefit
+
+Key paper-facing corrections:
+
+1. Early warning supports **local spare reservation / scheduling**, not overseas
+   ordering within ~2.5 days.
+2. AI cost-minimizing stock (**N=5** in the current run) beats reactive strongly
+   and also beats a fixed overstock (**N=10**) on total expected cost while
+   releasing working capital.
+3. Replace opaque `376.65 → 1,721.52 MWh` with the explicit bridge in
+   `priority1_mwh_npv_bridge.md` (observed preserved energy × horizon / observed
+   span). The paper factor itself is documented in
+   `mwh_scale_factor_376_to_1721.md`: \(1{,}721.52/376.65 \approx 4.57 = 24/5.25\)
+   (24-month P90 horizon over a 5.25-month effective pilot), **not** \(12/5\).
 

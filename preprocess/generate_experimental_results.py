@@ -816,32 +816,67 @@ def build_table2_inventory() -> tuple[Path, pd.DataFrame]:
     if curve.empty:
         raise FileNotFoundError(f"Missing inventory summary: {INVENTORY_SUMMARY_PATH}")
 
+    with INVENTORY_CONFIG_PATH.open(encoding="utf-8") as handle:
+        inv_cfg = json.load(handle)
+    hold_unit = float(inv_cfg["holding_cost_vnd_per_unit"])
+    fixed_n = int(inv_cfg.get("reference_prestock_units", 10))
+
     reactive = curve.loc[curve["stock_n"] == 0].iloc[0]
     prestock = curve.loc[curve["total_cost_vnd"].idxmin()]
 
+    # Extend curve to fixed pre-stock N if summary stops earlier:
+    # once shortage is already zero, additional units only add holding cost.
+    zero_loss_n = curve.loc[curve["expected_generation_loss_vnd"] <= 0, "stock_n"]
+    min_zero_loss_n = int(zero_loss_n.min()) if not zero_loss_n.empty else None
+    if fixed_n in set(curve["stock_n"].astype(int)):
+        fixed = curve.loc[curve["stock_n"] == fixed_n].iloc[0]
+        fixed_loss = float(fixed["expected_generation_loss_vnd"])
+        fixed_hold = float(fixed["holding_cost_vnd"])
+        fixed_total = float(fixed["total_cost_vnd"])
+    elif min_zero_loss_n is not None and fixed_n >= min_zero_loss_n:
+        fixed_loss = 0.0
+        fixed_hold = fixed_n * hold_unit
+        fixed_total = fixed_hold
+    else:
+        raise ValueError(
+            f"Cannot evaluate fixed pre-stock N={fixed_n}: inventory curve only "
+            f"covers stock_n up to {int(curve['stock_n'].max())} and shortage is still positive."
+        )
+
+    def _row(scenario: str, stock_n: int, loss: float, hold: float, total: float) -> dict:
+        saving = float(reactive["total_cost_vnd"] - total)
+        return {
+            "scenario": scenario,
+            "stock_n": stock_n,
+            "expected_generation_loss_vnd": loss,
+            "holding_cost_vnd": hold,
+            "total_cost_vnd": total,
+            "saving_vs_reactive_vnd": saving,
+            "cost_reduction_pct_vs_reactive": _safe_ratio(saving, float(reactive["total_cost_vnd"])) * 100,
+        }
+
     rows = [
-        {
-            "scenario": "Reactive",
-            "stock_n": int(reactive["stock_n"]),
-            "expected_generation_loss_vnd": float(reactive["expected_generation_loss_vnd"]),
-            "holding_cost_vnd": float(reactive["holding_cost_vnd"]),
-            "total_cost_vnd": float(reactive["total_cost_vnd"]),
-            "saving_vs_reactive_vnd": 0.0,
-            "cost_reduction_pct_vs_reactive": 0.0,
-        },
-        {
-            "scenario": "Pre-stock optimal",
-            "stock_n": int(prestock["stock_n"]),
-            "expected_generation_loss_vnd": float(prestock["expected_generation_loss_vnd"]),
-            "holding_cost_vnd": float(prestock["holding_cost_vnd"]),
-            "total_cost_vnd": float(prestock["total_cost_vnd"]),
-            "saving_vs_reactive_vnd": float(reactive["total_cost_vnd"] - prestock["total_cost_vnd"]),
-            "cost_reduction_pct_vs_reactive": _safe_ratio(
-                float(reactive["total_cost_vnd"] - prestock["total_cost_vnd"]),
-                float(reactive["total_cost_vnd"]),
-            )
-            * 100,
-        },
+        _row(
+            "Reactive",
+            int(reactive["stock_n"]),
+            float(reactive["expected_generation_loss_vnd"]),
+            float(reactive["holding_cost_vnd"]),
+            float(reactive["total_cost_vnd"]),
+        ),
+        _row(
+            "Pre-stock optimal (AI)",
+            int(prestock["stock_n"]),
+            float(prestock["expected_generation_loss_vnd"]),
+            float(prestock["holding_cost_vnd"]),
+            float(prestock["total_cost_vnd"]),
+        ),
+        _row(
+            f"Fixed pre-stock N={fixed_n}",
+            fixed_n,
+            fixed_loss,
+            fixed_hold,
+            fixed_total,
+        ),
     ]
     table = pd.DataFrame(rows)
     table_path = OUTPUT_DIR / "table2_inventory_cost_benefit.csv"
@@ -988,7 +1023,15 @@ def write_summary_report(
 ) -> Path:
     best_method = table1.sort_values(["f1_score", "precision", "recall"], ascending=False).iloc[0]
     watchlist_row = table1[table1["method"] == f"Proposed Top-{DEFAULT_WATCHLIST_TOP_K} Watchlist"]
-    inventory_best = table2.loc[table2["scenario"] == "Pre-stock optimal"].iloc[0]
+    inventory_best = table2.loc[table2["scenario"].astype(str).str.startswith("Pre-stock optimal")].iloc[0]
+    inventory_fixed = table2.loc[table2["scenario"].astype(str).str.startswith("Fixed pre-stock")]
+    fixed_line = (
+        f"- Fixed pre-stock comparator: N={int(inventory_fixed.iloc[0]['stock_n'])}, "
+        f"total cost {inventory_fixed.iloc[0]['total_cost_vnd']:,.0f} VND "
+        f"(AI optimal saves {inventory_fixed.iloc[0]['total_cost_vnd'] - inventory_best['total_cost_vnd']:,.0f} VND vs fixed)"
+        if not inventory_fixed.empty
+        else "- Fixed pre-stock comparator: N/A"
+    )
     recall_at_10 = ranking_summary.loc[ranking_summary["metric"] == "recall_at_top_10", "value"]
     median_best_rank = ranking_summary.loc[ranking_summary["metric"] == "median_best_rank", "value"]
     primary_best = primary_metrics[primary_metrics["method"] == "Proposed AI"]
@@ -1025,6 +1068,7 @@ def write_summary_report(
         f"- Optimal pre-stock level: {int(inventory_best['stock_n'])} spare units",
         f"- Total saving vs reactive: {inventory_best['saving_vs_reactive_vnd']:,.0f} VND",
         f"- Cost reduction vs reactive: {inventory_best['cost_reduction_pct_vs_reactive']:.2f}%",
+        fixed_line,
         "",
         "## 5.6 Financial Impact",
         "",
