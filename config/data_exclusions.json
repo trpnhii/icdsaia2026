@@ -1,0 +1,46 @@
+{
+  "notes": {
+    "incident_context": "2025-01 to 2025-07: HF17/HF18/HF20 had rotating or simultaneous outages due to project incidents. Documented for interpretation; not auto-excluded unless fleet-wide shutdown is detected.",
+    "public_holidays": "Whole-site planned shutdown or very low production on Vietnamese public holidays. Excluded from PR and risk scoring."
+  },
+  "public_holidays": [
+    "2025-01-01",
+    "2025-01-25",
+    "2025-01-26",
+    "2025-01-27",
+    "2025-01-28",
+    "2025-01-29",
+    "2025-01-30",
+    "2025-01-31",
+    "2025-02-01",
+    "2025-02-02",
+    "2025-04-07",
+    "2025-04-30",
+    "2025-05-01",
+    "2025-08-31",
+    "2025-09-01",
+    "2025-09-02",
+    "2025-09-03",
+    "2026-01-01",
+    "2026-02-14",
+    "2026-02-15",
+    "2026-02-16",
+    "2026-02-17",
+    "2026-02-18",
+    "2026-02-19",
+    "2026-02-20",
+    "2026-02-21",
+    "2026-02-22",
+    "2026-04-30",
+    "2026-05-01",
+    "2026-09-02"
+  ],
+  "fleet_shutdown_detection": {
+    "enabled": true,
+    "min_irradiation_kwh_m2": 2.0,
+    "max_yield_kwh": 50.0,
+    "min_devices": 30,
+    "low_yield_device_fraction": 0.85,
+    "reason": "fleet_wide_low_production"
+  }
+}

@@ -181,3 +181,8 @@ cython_debug/
 .cursorindexingignore
 /Data_raw
 *.csv
+/output
+/data_2_years
+/output_data
+/input_data
+/design

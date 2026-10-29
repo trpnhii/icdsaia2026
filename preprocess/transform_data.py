@@ -68,6 +68,16 @@ def transform_data(
     transformed_df = transformed_df[["zone", "date", *OUTPUT_COLUMNS]]
     transformed_df = _normalize_column_names(transformed_df)
 
+    # Performance Ratio = Yield / (Irradiation × Capacity)
+    # Only defined when irradiation is available and capacity > 0.
+    irr_col = "global_irradiation_kwh_m2"
+    cap_col = "total_string_capacity_kwp"
+    yield_col = "yield_kwh"
+    denominator = transformed_df[irr_col] * transformed_df[cap_col]
+    transformed_df["performance_ratio"] = (
+        transformed_df[yield_col] / denominator.replace(0, float("nan"))
+    ).round(4)
+
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / "transformed_data.csv"
     transformed_df.to_csv(output_path, index=False, encoding="utf-8-sig")
