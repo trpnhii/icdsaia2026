@@ -22,6 +22,7 @@ python scripts/build_dashboard_data.py
 3. Under **Build and deployment**, set **Source** to **Deploy from a branch**.
 4. Choose branch `main` (or your default branch) and folder `/ (root)`.
 5. Save. GitHub will publish the site at `https://<username>.github.io/<repo>/`.
+6. 
 
 ## Experimental Results
 
